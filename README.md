@@ -10,16 +10,30 @@
 
 👉 線上版：https://eastonesd.github.io/eastone.stock/
 
+## 安裝成 APP
+
+和東石系統一樣是 PWA，不用上架商店：
+
+- **iPhone / iPad**：用 Safari 打開 → 分享 → 加入主畫面（頁面右上角「安裝 APP」有圖文步驟）
+- **Android / 電腦版 Chrome、Edge**：按頁面右上角「安裝 APP」，或網址列右側的安裝圖示
+
+裝好後從主畫面開是全螢幕，沒有網址列；自選股和金鑰都會保留。
+更新只要推上 GitHub，下次有網路開 APP 就是新版（Service Worker 採網路優先，不會卡舊版）；
+沒網路時仍可開啟 APP 外殼，但要連網才能查詢。
+
 ## 架構
 
 純前端，沒有後端伺服器，直接放在 GitHub Pages。瀏覽器直接向 [FinMind](https://finmindtrade.com/) 抓資料，在本機算分數。
 
 ```
 index.html          頁面
+manifest.json       APP 名稱、圖示、主題色（安裝用）
+sw.js               Service Worker（網路優先，離線時才用快取）
+icons/              APP 圖示（192 / 512 / maskable / apple-touch / favicon）
 assets/scoring.js   評分引擎（所有級距與門檻都在這裡）
 assets/finmind.js   FinMind 資料存取、股票清單快取、診斷快取
-assets/app.js       畫面互動、紅綠燈、走勢圖、自選股
-assets/style.css    樣式（含深色模式、手機版）
+assets/app.js       畫面互動、紅綠燈、走勢圖、自選股、安裝按鈕
+assets/style.css    樣式（含深色模式、手機版、APP 模式）
 ```
 
 ## FinMind 金鑰

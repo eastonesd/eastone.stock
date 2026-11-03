@@ -53,8 +53,28 @@ button { font: inherit; cursor: pointer; }
 
 /* ---------- 頂部 ---------- */
 .topbar {
-  height: 60px; display: flex; align-items: center; padding: 0 24px;
+  min-height: 60px; display: flex; align-items: center; gap: 8px;
+  padding: env(safe-area-inset-top) max(24px, env(safe-area-inset-right)) 0 max(24px, env(safe-area-inset-left));
   background: var(--card); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+body { padding-bottom: env(safe-area-inset-bottom); }
+/* 從主畫面開啟（APP 模式）時：不能長按選字、點擊不閃藍框，比較像原生 APP */
+@media (display-mode: standalone) {
+  body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  input, .item, .warnings { -webkit-user-select: text; user-select: text; }
+}
+.install-btn { margin-left: auto; font-weight: 700; }
+.install-btn[hidden] + .token-btn { margin-left: auto; }
+.ios-steps { margin: 0 0 4px; padding-left: 20px; font-size: 14px; color: var(--ink); line-height: 1.9; }
+.ios-share {
+  display: inline-block; width: 14px; height: 17px; vertical-align: -2px; margin-left: 2px;
+  border: 2px solid var(--ink); border-top: 0; border-radius: 0 0 3px 3px; position: relative;
+}
+.ios-share::before { content: ""; position: absolute; left: 4px; top: -7px; width: 2px; height: 12px; background: var(--ink); }
+.ios-share::after {
+  content: ""; position: absolute; left: 1px; top: -8px; width: 5px; height: 5px;
+  border-left: 2px solid var(--ink); border-top: 2px solid var(--ink); transform: rotate(45deg);
 }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
 .brand img { height: 36px; width: auto; }
@@ -64,7 +84,6 @@ button { font: inherit; cursor: pointer; }
   background: var(--brand); border-radius: 6px; padding: 1px 8px;
 }
 
-.token-btn { margin-left: auto; }
 .token-btn.set::before { content: "● "; color: var(--green); }
 .token-dlg {
   width: min(440px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--radius);

@@ -2,9 +2,18 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>東石診股</title>
-  <link rel="icon" href="assets/icon.png">
+  <!-- APP 安裝：Android / 桌面 Chrome 看 manifest.json -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1B2A4A">
+  <!-- iOS「加入主畫面」專用設定（與東石系統相同做法） -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="東石診股">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -17,8 +26,22 @@
       <span>東石系統</span>
       <em>診股</em>
     </a>
+    <button id="installBtn" class="ghost install-btn" type="button" hidden>安裝 APP</button>
     <button id="tokenBtn" class="ghost token-btn" type="button">金鑰</button>
   </header>
+
+  <dialog id="iosDlg" class="token-dlg">
+    <form method="dialog">
+      <h3>安裝到 iPhone 主畫面</h3>
+      <ol class="ios-steps">
+        <li>建議用 <b>Safari</b> 開這個頁面</li>
+        <li>點下方工具列的 <b>分享</b> 按鈕 <span class="ios-share" aria-hidden="true"></span></li>
+        <li>往下滑，選 <b>加入主畫面</b>，再按右上角 <b>加入</b></li>
+      </ol>
+      <p class="small">裝好之後從主畫面開，就是全螢幕的 APP，自選股和金鑰都會保留。</p>
+      <div class="dlg-actions"><button value="ok" class="primary" type="submit">知道了</button></div>
+    </form>
+  </dialog>
 
   <dialog id="tokenDlg" class="token-dlg">
     <form method="dialog">

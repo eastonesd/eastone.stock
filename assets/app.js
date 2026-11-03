@@ -344,6 +344,39 @@
   });
   paintTokenBtn();
 
+  // ---------------- 安裝成 APP ----------------
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS 偽裝成 Mac
+  let installEvt = null;
+
+  if (!standalone) {
+    // Android / 桌面 Chrome、Edge：瀏覽器判定可安裝時才出現按鈕
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      installEvt = e;
+      $("installBtn").hidden = false;
+    });
+    // iPhone / iPad：Safari 沒有安裝 API，改成教學步驟
+    if (isIOS) $("installBtn").hidden = false;
+  }
+  $("installBtn").addEventListener("click", async () => {
+    if (installEvt) {
+      installEvt.prompt();
+      const { outcome } = await installEvt.userChoice;
+      if (outcome === "accepted") $("installBtn").hidden = true;
+      installEvt = null;
+    } else if (isIOS) {
+      const d = $("iosDlg");
+      if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+    }
+  });
+  window.addEventListener("appinstalled", () => { $("installBtn").hidden = true; });
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) {
+    navigator.serviceWorker.register("sw.js").catch(() => { /* 沒有也能用 */ });
+  }
+
   // ---------------- 啟動 ----------------
   FinMind.loadStockList().catch(() => { /* 搜尋時會再試 */ });
   $("quick").innerHTML = QUICK.map(([id, name]) =>

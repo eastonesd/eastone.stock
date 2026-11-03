@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "東石診股",
+  "short_name": "東石診股",
+  "description": "台股紅綠燈：健康面與投資面 10 項指標一眼看完",
+  "lang": "zh-Hant-TW",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F2EE",
+  "theme_color": "#1B2A4A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
