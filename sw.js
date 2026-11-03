@@ -13,7 +13,8 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
-    fetch(req)
+    // no-cache：每次都向 GitHub Pages 確認是否有新版（Pages 預設讓瀏覽器快取 10 分鐘）
+    fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
