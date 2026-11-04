@@ -282,7 +282,7 @@
     const cfg = Object.assign({}, DEFAULTS, options || {});
     const light = makeLight(cfg);
     if (!bundle.daily || !bundle.daily.length) {
-      const err = new Error("找不到 " + stockId + " 的股價資料，請確認代號是否正確");
+      const err = new Error("找不到 " + stockId + " 的股價資料：代號有誤，或這檔已經下市");
       err.notFound = true;
       throw err;
     }

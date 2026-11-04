@@ -10,7 +10,7 @@
 
   const BASE = "https://api.finmindtrade.com/api/v4/data";
   const TOKEN_KEY = "eastone.finmindToken";
-  const LIST_KEY = "eastone.stockList.v1";
+  const LIST_KEY = "eastone.stockList.v2";   // v2：排除已下市股票（換 key 讓舊快取失效）
   const LIST_TTL = 24 * 60 * 60 * 1000;   // 股票清單一天更新一次
   const RESULT_TTL = 30 * 60 * 1000;      // 同一檔 30 分鐘內不重抓
 
@@ -77,10 +77,24 @@
         if (Date.now() - c.t < LIST_TTL && c.rows.length) return (listPromise = Promise.resolve(c.rows));
       } catch (e) { /* 壞掉就重抓 */ }
     }
-    listPromise = get("TaiwanStockInfo").then((data) => {
+    listPromise = Promise.all([
+      get("TaiwanStockInfo"),
+      get("TaiwanStockDelisting").catch(() => []),   // 抓不到下市清單時就不過濾
+    ]).then(([data, delisted]) => {
+      // FinMind 的股票清單會殘留已下市的舊代號（例如 2311 日月光 → 已併入 3711 日月光投控），
+      // 同名時會搶走搜尋第一名、選了卻查不到股價。
+      // 排除規則：在下市清單裡，而且股票清單裡的資料日期不是最新一天（代表已沒在更新）。
+      // 兩個條件都要成立，避免誤刪上櫃轉上市等代號沿用的股票。
+      const latest = {};
+      data.forEach((r) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(r.date) && !(latest[r.stock_id] > r.date)) latest[r.stock_id] = r.date;
+      });
+      const newest = Object.values(latest).sort().pop();
+      const gone = new Set(delisted.map((r) => r.stock_id).filter((id) => latest[id] !== newest));
+
       const seen = new Set(), rows = [];
       data.forEach((r) => {
-        if (seen.has(r.stock_id)) return;
+        if (seen.has(r.stock_id) || gone.has(r.stock_id)) return;
         seen.add(r.stock_id);
         rows.push([r.stock_id, r.stock_name, r.industry_category || ""]);
       });
