@@ -430,3 +430,10 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .na { font-size: 13px; font-weight: 700; color: var(--faint); border: 1px dashed var(--line); border-radius: 8px; padding: 3px 8px; }
 .dim-na { margin: 14px 0 12px; padding: 14px 16px; border-radius: 12px; background: var(--seg); color: var(--muted); font-size: 14px; line-height: 1.7; }
 .dim-lamp .dl-score .na { font-size: 12px; }
+
+/* ETF 類別標籤（代號結尾字母） */
+.etf-tag { align-self: center; font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  color: var(--gold); border: 1.5px solid var(--gold); background: var(--gold-soft); white-space: nowrap; }
+.etf-tag.t-L { color: #C2410C; border-color: #C2410C; background: color-mix(in srgb, #C2410C 10%, var(--card)); }
+.etf-tag.t-R { color: #7C3AED; border-color: #7C3AED; background: color-mix(in srgb, #7C3AED 10%, var(--card)); }
+.etf-tag.t-B { color: #2F7BD8; border-color: #2F7BD8; background: color-mix(in srgb, #2F7BD8 10%, var(--card)); }

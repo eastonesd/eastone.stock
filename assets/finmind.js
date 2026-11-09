@@ -114,9 +114,10 @@
     const q = (query || "").trim();
     if (!q) return [];
     const rows = await loadStockList();
-    const hits = rows.filter(([id, name]) => id.startsWith(q) || name.includes(q));
+    const qu = q.toUpperCase();                       // 00679b 也找得到 00679B
+    const hits = rows.filter(([id, name]) => id.startsWith(qu) || name.includes(q));
     hits.sort((a, b) => {
-      const ea = a[0] === q || a[1] === q, eb = b[0] === q || b[1] === q;
+      const ea = a[0] === qu || a[1] === q, eb = b[0] === qu || b[1] === q;
       if (ea !== eb) return ea ? -1 : 1;                 // 完全相符優先
       if (a[0].length !== b[0].length) return a[0].length - b[0].length;  // 普通股優先於權證
       return a[0] < b[0] ? -1 : 1;

@@ -331,6 +331,7 @@
       overall: { score: round(overall, 1), light: overallLight, verdict: VERDICT[overallLight] },
       weights,
       etf,
+      etf_type: etfType(stockId),
       thresholds: { green: cfg.greenAt, yellow: cfg.yellowAt },
       dimensions: [
         { key: "health", name: "健康面", sub: etf ? "ETF 不適用" : "財報 · 估值 · 籌碼", score: round(hScore, 1),
@@ -349,7 +350,17 @@
   // 台灣 ETF 代號一律 00 開頭（例如 0050、00878）
   function isEtf(stockId) { return /^00/.test(String(stockId || "")); }
 
-  const api = { diagnose, BANDS, DEFAULTS, isEtf };
+  // ETF 代號結尾的英文字母代表類別，例如 00679B、00631L、00632R、00980A
+  const ETF_SUFFIX = { B: "債券型", L: "槓桿型", R: "反向型", A: "主動式", D: "主動式" };
+  function etfType(stockId) {
+    if (!isEtf(stockId)) return null;
+    const m = /([A-Za-z])$/.exec(String(stockId));
+    if (!m) return { code: "", label: "ETF" };
+    const code = m[1].toUpperCase();
+    return { code, label: ETF_SUFFIX[code] ? ETF_SUFFIX[code] + " ETF" : "ETF（" + code + " 類）" };
+  }
+
+  const api = { diagnose, BANDS, DEFAULTS, isEtf, etfType };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Scoring = api;
 })(typeof self !== "undefined" ? self : this);
