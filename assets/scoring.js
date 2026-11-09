@@ -302,12 +302,15 @@
 
     const warnings = [];
     const price = preparePrice(bundle.daily);
-    const health = healthItems(bundle, warnings, item);
+    // 00 開頭是台灣 ETF：沒有單一公司的財報與估值，健康面不適用，綜合分只看投資面
+    const etf = isEtf(stockId);
+    const health = etf ? [] : healthItems(bundle, warnings, item);
     const invest = investItems(price, warnings, item);
+    const weights = etf ? { health: 0, invest: 1 } : { health: cfg.healthWeight, invest: cfg.investWeight };
 
-    const hScore = mean(health.map((i) => i.score));
+    const hScore = etf ? null : mean(health.map((i) => i.score));
     const iScore = mean(invest.map((i) => i.score));
-    const parts = [[hScore, cfg.healthWeight], [iScore, cfg.investWeight]].filter(([s]) => isNum(s));
+    const parts = [[hScore, weights.health], [iScore, weights.invest]].filter(([s, w]) => isNum(s) && w > 0);
     const overall = parts.length ? sum(parts.map(([s, w]) => s * w)) / sum(parts.map(([, w]) => w)) : null;
 
     const L = price.close.length - 1;
@@ -326,10 +329,13 @@
         change_pct: prevClose ? round(spread / prevClose, 4) : null,
       },
       overall: { score: round(overall, 1), light: overallLight, verdict: VERDICT[overallLight] },
-      weights: { health: cfg.healthWeight, invest: cfg.investWeight },
+      weights,
+      etf,
       thresholds: { green: cfg.greenAt, yellow: cfg.yellowAt },
       dimensions: [
-        { key: "health", name: "健康面", sub: "財報 · 估值 · 籌碼", score: round(hScore, 1), light: light(hScore), items: health },
+        { key: "health", name: "健康面", sub: etf ? "ETF 不適用" : "財報 · 估值 · 籌碼", score: round(hScore, 1),
+          light: light(hScore), items: health, excluded: etf,
+          note: etf ? "ETF 是一籃子股票，沒有單一公司的財報、本益比與法人連買可評，因此不計入綜合分。" : "" },
         { key: "invest", name: "投資面", sub: "量價 · 趨勢 · 波動", score: round(iScore, 1), light: light(iScore), items: invest },
       ],
       chart: {
@@ -340,7 +346,10 @@
     };
   }
 
-  const api = { diagnose, BANDS, DEFAULTS };
+  // 台灣 ETF 代號一律 00 開頭（例如 0050、00878）
+  function isEtf(stockId) { return /^00/.test(String(stockId || "")); }
+
+  const api = { diagnose, BANDS, DEFAULTS, isEtf };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Scoring = api;
 })(typeof self !== "undefined" ? self : this);

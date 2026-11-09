@@ -425,3 +425,8 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   body.has-result .item { padding: 5px 0; }
   body.has-result .wrap { padding-top: 10px; row-gap: 10px; }
 }
+
+/* ETF：健康面不計分 */
+.na { font-size: 13px; font-weight: 700; color: var(--faint); border: 1px dashed var(--line); border-radius: 8px; padding: 3px 8px; }
+.dim-na { margin: 14px 0 12px; padding: 14px 16px; border-radius: 12px; background: var(--seg); color: var(--muted); font-size: 14px; line-height: 1.7; }
+.dim-lamp .dl-score .na { font-size: 12px; }

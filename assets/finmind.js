@@ -55,6 +55,8 @@
   // 一次診斷需要的 5 份資料，同時發出
   async function fetchBundle(id) {
     const p = (dataset, start) => get(dataset, { data_id: id, start_date: daysAgo(start) });
+    // ETF 只看投資面：不必抓財報、資產負債表、本益比與法人資料，省下 4 次查詢
+    if (root.Scoring.isEtf(id)) return { daily: await p("TaiwanStockPrice", 800), income: [], balance: [], per: [], inst: [] };
     const [daily, income, balance, per, inst] = await Promise.all([
       p("TaiwanStockPrice", 800),                                   // MA240 + σ240 + 一年走勢圖
       p("TaiwanStockFinancialStatements", 365 * 3 + 120),           // 近四季與去年同期

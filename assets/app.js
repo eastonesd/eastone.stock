@@ -179,7 +179,7 @@
     v.textContent = LIGHT_NAME[L] + "｜" + r.overall.verdict;
     $("meta").textContent = "資料日 " + r.as_of + " · " +
       (r.cached ? "快取（" + r.fetched_at + " 抓取）" : "剛抓取 " + r.fetched_at) +
-      " · 健康 " + pct(r.weights.health) + " ＋ 投資 " + pct(r.weights.invest);
+      (r.etf ? " · ETF：只看投資面" : " · 健康 " + pct(r.weights.health) + " ＋ 投資 " + pct(r.weights.invest));
 
     // 分數環
     const ring = $("ring");
@@ -196,7 +196,7 @@
     $("dimLamps").innerHTML = r.dimensions.map((d) =>
       '<div class="dim-lamp ' + d.light + '">' + lampHTML(d.light) +
       '<div class="dl-text"><b>' + d.name + "</b><small>" + d.sub + "</small></div>" +
-      '<div class="dl-score">' + (d.score != null ? Math.round(d.score) : "–") + "<small>分</small></div></div>").join("");
+      '<div class="dl-score">' + (d.excluded ? '<span class="na">不計分</span>' : (d.score != null ? Math.round(d.score) : "–") + "<small>分</small>") + "</div></div>").join("");
 
     // 兩個面向
     $("dims").innerHTML = r.dimensions.map(renderDim).join("");
@@ -209,8 +209,8 @@
     return '<div class="card dim">' +
       '<div class="dim-head">' + lampHTML(d.light) +
       "<div><h3>" + d.name + "</h3><small>" + d.sub + "</small></div>" +
-      '<div class="sc">' + (d.score != null ? Math.round(d.score) : "–") + "<small>分</small></div></div>" +
-      d.items.map(renderItem).join("") + "</div>";
+      '<div class="sc">' + (d.excluded ? '<span class="na">不計分</span>' : (d.score != null ? Math.round(d.score) : "–") + "<small>分</small>") + "</div></div>" +
+      (d.excluded ? '<p class="dim-na">' + esc(d.note) + "</p>" : d.items.map(renderItem).join("")) + "</div>";
   }
 
   function renderItem(it) {
