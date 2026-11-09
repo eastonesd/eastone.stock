@@ -168,7 +168,7 @@
     $("stockCode").textContent = r.stock.id;
     const tag = $("etfTag"), t = r.etf_type;
     tag.hidden = !t;
-    if (t) { tag.textContent = t.label; tag.className = "etf-tag" + (t.code ? " t-" + t.code : ""); }
+    if (t) { tag.textContent = t.label; tag.className = "etf-tag f-" + t.family; }
     $("close").textContent = fmt(r.price.close);
     const chg = $("change");
     if (r.price.change != null) {

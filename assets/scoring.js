@@ -350,14 +350,31 @@
   // 台灣 ETF 代號一律 00 開頭（例如 0050、00878）
   function isEtf(stockId) { return /^00/.test(String(stockId || "")); }
 
-  // ETF 代號結尾的英文字母代表類別，例如 00679B、00631L、00632R、00980A
-  const ETF_SUFFIX = { B: "債券型", L: "槓桿型", R: "反向型", A: "主動式", D: "主動式" };
+  // ETF 代號結尾的英文字母代表類別，例如 00679B、00631L、00632R、00635U、00980A
+  // family 只用來決定標籤顏色：bond 債券、lev 槓桿、inv 反向、fut 期貨、active 主動、mix 平衡、stock 股票
+  const ETF_SUFFIX = {
+    // 台幣計價
+    B: { label: "債券型", family: "bond" },
+    L: { label: "槓桿型", family: "lev" },
+    R: { label: "反向型", family: "inv" },
+    U: { label: "期貨型", family: "fut" },
+    A: { label: "主動式", family: "active" },
+    D: { label: "主動式債券型", family: "bond" },
+    T: { label: "被動式平衡型", family: "mix" },
+    // 外幣計價
+    K: { label: "股票型", family: "stock", foreign: true },
+    C: { label: "債券型", family: "bond", foreign: true },
+    M: { label: "槓桿型", family: "lev", foreign: true },
+    S: { label: "反向型", family: "inv", foreign: true },
+    V: { label: "期貨型", family: "fut", foreign: true },
+  };
   function etfType(stockId) {
     if (!isEtf(stockId)) return null;
     const m = /([A-Za-z])$/.exec(String(stockId));
-    if (!m) return { code: "", label: "ETF" };
-    const code = m[1].toUpperCase();
-    return { code, label: ETF_SUFFIX[code] ? ETF_SUFFIX[code] + " ETF" : "ETF（" + code + " 類）" };
+    if (!m) return { code: "", label: "ETF", family: "stock", foreign: false };
+    const code = m[1].toUpperCase(), t = ETF_SUFFIX[code];
+    if (!t) return { code, label: "ETF（" + code + " 類）", family: "other", foreign: false };
+    return { code, label: (t.foreign ? "外幣計價 · " : "") + t.label + " ETF", family: t.family, foreign: !!t.foreign };
   }
 
   const api = { diagnose, BANDS, DEFAULTS, isEtf, etfType };
