@@ -192,6 +192,12 @@
       '<span><i class="dot ' + d.light + '"></i>' + d.name + " <b>" +
       (d.score != null ? Math.round(d.score) : "–") + "</b></span>").join("");
 
+    // 左欄：兩個面向的燈號（電腦單一畫面版面使用）
+    $("dimLamps").innerHTML = r.dimensions.map((d) =>
+      '<div class="dim-lamp ' + d.light + '">' + lampHTML(d.light) +
+      '<div class="dl-text"><b>' + d.name + "</b><small>" + d.sub + "</small></div>" +
+      '<div class="dl-score">' + (d.score != null ? Math.round(d.score) : "–") + "<small>分</small></div></div>").join("");
+
     // 兩個面向
     $("dims").innerHTML = r.dimensions.map(renderDim).join("");
     renderChart(r.chart);
@@ -230,6 +236,7 @@
   }
 
   // ---------------- 走勢圖（純 SVG，不依賴外部函式庫） ----------------
+  const FIT_QUERY = "(min-width: 1100px) and (min-height: 620px)";
   const SERIES = [
     ["close", "收盤", "--c-close", 2],
     ["MA20", "MA20", "--c-ma20", 1.4],
@@ -241,7 +248,10 @@
     const box = $("chart");
     // 依實際寬度繪製（不縮放），手機上文字才不會被壓扁
     const W = Math.max(280, Math.round(box.clientWidth || 1000));
-    const H = W < 600 ? 220 : 300, padL = 4, padR = 52, padT = 12, padB = 26;
+    // 電腦單一畫面版面：圖表高度跟著剩下的空間走；其他情況維持固定高度
+    const fitH = document.body.classList.contains("has-result") && matchMedia(FIT_QUERY).matches
+      ? Math.max(80, Math.round(box.clientHeight)) : 0;
+    const H = fitH || (W < 600 ? 220 : 300), padL = 4, padR = 52, padT = 12, padB = 26;
     const n = c.dates.length;
     if (n < 2) { box.innerHTML = ""; return; }
     let lo = Infinity, hi = -Infinity;
@@ -314,6 +324,7 @@
   // ---------------- 工具 ----------------
   function show(which) {
     ["empty", "loading", "error", "result"].forEach((k) => { $(k).hidden = k !== which; });
+    document.body.classList.toggle("has-result", which === "result");
   }
   function fmt(v) {
     if (v == null || isNaN(v)) return "–";
