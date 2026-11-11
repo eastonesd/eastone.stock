@@ -1,5 +1,5 @@
 :root {
-  /* 東石系統藍金配色 */
+  /* 東石藍金配色 */
   --bg: #F6F3EC;
   --card: #FFFDF8;
   --ink: #2A2A26;
@@ -86,7 +86,7 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   border-left: 2px solid var(--ink); border-top: 2px solid var(--ink); transform: rotate(45deg);
 }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #F6F3EC; }
-.brand img { background: #FFFDF8; border-radius: 50%; padding: 2px; }
+.brand img { border-radius: 50%; box-shadow: 0 0 0 2px #B8892B, 0 2px 8px rgba(0, 0, 0, .35); }
 .topbar .ghost { background: transparent; color: #F6F3EC; border-color: rgba(246,243,236,.35); }
 .topbar .ghost:hover { border-color: #E9C46A; color: #E9C46A; }
 .brand img { height: 36px; width: auto; }
