@@ -20,10 +20,17 @@
   }
   let watch = loadWatch();
 
+  // 自選股記錄：v 是評分算法版本，舊版算的分數開啟時會自動重算
+  function entryOf(r, fallbackName) {
+    return { id: r.stock.id, name: r.stock.name || fallbackName || r.stock.id,
+      score: r.overall.score, light: r.overall.light, v: Scoring.VERSION };
+  }
+  const isStale = (w) => w.v !== Scoring.VERSION;
+
   function upsertWatch(r) {
     const i = watch.findIndex((w) => w.id === r.stock.id);
     if (i < 0) return;
-    watch[i] = { id: r.stock.id, name: r.stock.name || watch[i].name, score: r.overall.score, light: r.overall.light };
+    watch[i] = entryOf(r, watch[i].name);
     saveWatch(watch);
   }
 
@@ -37,11 +44,12 @@
     }
     watch.forEach((w) => {
       const chip = document.createElement("span");
-      chip.className = "chip" + (current && current.stock.id === w.id ? " active" : "");
+      chip.className = "chip" + (current && current.stock.id === w.id ? " active" : "") + (updating.has(w.id) ? " busy" : "");
+      chip.title = updating.has(w.id) ? "用新算法重新診斷中…" : isStale(w) ? "舊算法的分數，等待自動更新" : "";
       chip.innerHTML =
         '<span class="dot ' + (w.light || "gray") + '"></span>' +
         "<span>" + esc(w.name || w.id) + "</span>" +
-        '<span class="s">' + (w.score != null ? Math.round(w.score) : "–") + "</span>" +
+        '<span class="s">' + (updating.has(w.id) ? "…" : w.score != null ? Math.round(w.score) : "–") + "</span>" +
         '<button class="x" title="移除" type="button">×</button>';
       chip.addEventListener("click", (e) => {
         if (e.target.classList.contains("x")) {
@@ -65,22 +73,39 @@
     if (!current) return;
     const id = current.stock.id;
     if (watch.some((w) => w.id === id)) watch = watch.filter((w) => w.id !== id);
-    else watch.push({ id, name: current.stock.name, score: current.overall.score, light: current.overall.light });
+    else watch.push(entryOf(current));
     saveWatch(watch); renderWatch(); updateWatchBtn();
   });
 
-  $("refreshAll").addEventListener("click", async () => {
+  // 依序重新診斷自選股（一次一檔，避免 FinMind 查詢次數一下子用完）
+  const updating = new Set();
+  let refreshing = false;
+  async function refreshWatch(onlyStale) {
+    if (refreshing) return;
+    const ids = watch.filter((w) => !onlyStale || isStale(w)).map((w) => w.id);
+    if (!ids.length) return;
+    refreshing = true;
     const btn = $("refreshAll");
     btn.disabled = true;
-    for (let i = 0; i < watch.length; i++) {
-      btn.textContent = "更新中 " + (i + 1) + "/" + watch.length;
+    for (let i = 0; i < ids.length; i++) {
+      if (!watch.some((w) => w.id === ids[i])) continue;      // 途中被移除
+      btn.textContent = "更新中 " + (i + 1) + "/" + ids.length;
+      updating.add(ids[i]); renderWatch();
       try {
-        const r = await FinMind.diagnose(watch[i].id);
-        upsertWatch(r); renderWatch();
-      } catch (e) { /* 單檔失敗不影響其他 */ }
+        const r = await FinMind.diagnose(ids[i], !onlyStale);
+        upsertWatch(r);
+      } catch (e) {
+        updating.delete(ids[i]); renderWatch();
+        if (/次數已用完/.test(e.message)) break;                // 額度用完就停，下次開啟再繼續
+        continue;
+      }
+      updating.delete(ids[i]); renderWatch();
     }
+    updating.clear(); renderWatch();
     btn.textContent = "全部更新"; btn.disabled = false;
-  });
+    refreshing = false;
+  }
+  $("refreshAll").addEventListener("click", () => refreshWatch(false));
 
   // ---------------- 搜尋與自動完成 ----------------
   const input = $("q");
@@ -399,6 +424,8 @@
     input.value = b.textContent; diagnose(b.dataset.id);
   }));
   renderWatch();
+  // 自選股裡用舊算法算的分數，開啟後自動在背景重算（不必一檔一檔點）
+  setTimeout(() => refreshWatch(true), 1500);
   function fromHash() {
     const id = decodeURIComponent(location.hash.slice(1)).trim();
     if (id && (!current || current.stock.id !== id)) { input.value = id; diagnose(id); }

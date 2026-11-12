@@ -377,7 +377,11 @@
     return { code, label: (t.foreign ? "外幣計價 · " : "") + t.label + " ETF", family: t.family, foreign: !!t.foreign };
   }
 
-  const api = { diagnose, BANDS, DEFAULTS, isEtf, etfType };
+  // 評分算法版本：改了評分規則就把數字加 1，自選股裡用舊算法算的分數會在開啟時自動重算
+  // 2：00 開頭 ETF 只看投資面（2026-11-09）
+  const VERSION = 2;
+
+  const api = { diagnose, BANDS, DEFAULTS, isEtf, etfType, VERSION };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Scoring = api;
 })(typeof self !== "undefined" ? self : this);
