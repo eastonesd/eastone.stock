@@ -71,6 +71,7 @@ def onshore():
             "id": safe_id("T", code), "name": (r.get("基金名稱") or "").strip(), "company": (r.get("公司名稱") or "").strip(),
             "currency": (r.get("幣別") or "TWD").strip() or "TWD", "kind": "境內", "isin": "",
             "type": (r.get("類型代號") or "").strip(), "ticker": (r.get("受益憑證代號") or "").strip(),
+            "org": (r.get("會員代號") or "").strip(), "issuer": "",
             "date": d, "nav": nav,
         })
     return rows
@@ -87,7 +88,8 @@ def offshore():
         rows.append({
             "id": safe_id("F", code), "name": (r.get("基金名稱") or "").strip(), "company": (r.get("總代理機構") or "").strip(),
             "currency": (r.get("計價幣別") or "").strip(), "kind": "境外", "isin": (r.get("ISINCODE") or "").strip(),
-            "type": "", "ticker": "", "date": d, "nav": nav,
+            "type": "", "ticker": "", "org": "", "issuer": (r.get("境外基金機構") or "").strip(),
+            "date": d, "nav": nav,
         })
     return rows
 
@@ -140,12 +142,13 @@ def main():
         prev = old.get(fid)
         if prev and prev[7] > r["date"]:
             continue
-        old[fid] = [fid, r["name"], r["company"], r["currency"], r["kind"], r["isin"], r["type"], r["date"], r["nav"], r["ticker"]]
+        old[fid] = [fid, r["name"], r["company"], r["currency"], r["kind"], r["isin"], r["type"], r["date"], r["nav"], r["ticker"],
+                    r["org"], r["issuer"]]
     funds = sorted(old.values(), key=lambda x: (x[4] != "境內", x[2], x[1]))
     with open(index_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump({
             "updated": datetime.now(TW).strftime("%Y-%m-%d %H:%M"),
-            "columns": ["id", "name", "company", "currency", "kind", "isin", "type", "date", "nav", "ticker"],
+            "columns": ["id", "name", "company", "currency", "kind", "isin", "type", "date", "nav", "ticker", "org", "issuer"],
             "sources": {"境內": SITCA_URL, "境外": TDCC_URL},
             "errors": errors,
             "funds": funds,
