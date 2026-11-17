@@ -1,0 +1,41 @@
+# 東石診股：每天收集境內外基金淨值（來源只給最近幾天，所以要天天存才會有歷史）
+name: 基金淨值每日收集
+
+on:
+  schedule:
+    # 台灣時間 10:17、18:17、23:47（重複抓沒關係，同一天的淨值只會存一次）
+    - cron: "17 2 * * *"
+    - cron: "17 10 * * *"
+    - cron: "47 15 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/fund-nav.yml", "tools/fund_nav.py"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fund-nav
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 抓取並累積淨值
+        run: python tools/fund_nav.py
+      - name: 存回儲存庫
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/funds
+          if git diff --cached --quiet; then echo "沒有新淨值"; exit 0; fi
+          git commit -q -m "基金淨值更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q && exit 0; sleep 5; done
+          exit 1
