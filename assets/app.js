@@ -443,9 +443,12 @@
       (s.vol == null ? "累積中" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
 
     const pct = Math.min(100, Math.round((s.span / 365) * 100));
-    $("fLamp").innerHTML = '<div class="fl-head"><b>燈號評分</b><span>資料累積中</span></div>' +
+    const enough = s.span >= 365;
+    $("fLamp").innerHTML = '<div class="fl-head"><b>燈號評分</b><span>' + (enough ? "評分規則訂定中" : "資料累積中") + "</span></div>" +
       '<div class="fl-bar"><i style="width:' + Math.max(2, pct) + '%"></i></div>' +
-      '<p>已累積 ' + s.span + " 天的淨值。滿 3 個月可看近期報酬與波動，滿 1 年後再依走勢、報酬與波動給燈號。</p>";
+      "<p>" + (enough
+        ? "已有 " + s.span + " 天（約 " + (s.span / 365).toFixed(1) + " 年）的淨值，資料已足夠。基金燈號的評分規則訂好後就會在這裡亮燈。"
+        : "已累積 " + s.span + " 天的淨值。滿 3 個月可看近期報酬與波動，滿 1 年後再依走勢、報酬與波動給燈號。") + "</p>";
 
     renderFundChart(cf);
     updateFundWatchBtn();
