@@ -11,7 +11,7 @@
 輸出：
   data/funds/index.json      全部基金清單＋最新淨值（網頁搜尋用）
   data/funds/nav/<id>.csv    每檔基金的淨值歷史：date,nav（日期 YYYY-MM-DD）
-基金 ID：境內 T-<基金代號>（例 T-DDO04），境外 F-<基金代碼>（例 F-AGIF-FV1）
+基金 ID：境內 T-<基金統編>（例 T-18480065），境外 F-<基金代碼>（例 F-AGIF-FV1）
 只用 Python 標準函式庫，不需要安裝任何套件。
 """
 import csv, io, json, os, re, sys, time, urllib.request
@@ -63,7 +63,8 @@ def onshore():
         text = raw.decode("big5", errors="replace")
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
-        code, d, nav = (r.get("基金代號") or "").strip(), iso(r.get("日期")), num(r.get("基金淨值"))
+        # 「基金代號」各家投信會重複（例如 DDO04 有好幾家在用），「基金統編」才是每檔、每個級別唯一的編號
+        code, d, nav = (r.get("基金統編") or "").strip(), iso(r.get("日期")), num(r.get("基金淨值"))
         if not code or not d or nav is None:
             continue
         rows.append({
