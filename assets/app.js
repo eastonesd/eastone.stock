@@ -4,7 +4,19 @@
   const $ = (id) => document.getElementById(id);
   const LIGHT_NAME = { green: "綠燈", yellow: "黃燈", red: "紅燈", gray: "無資料" };
   const WATCH_KEY = "eastone.watchlist.v1";
-  const QUICK = [["2330", "台積電"], ["2317", "鴻海"], ["2454", "聯發科"], ["2881", "富邦金"], ["0050", "元大台灣50"]];
+  const QUICK = {
+    tw: [["2330", "台積電"], ["2317", "鴻海"], ["2454", "聯發科"], ["2881", "富邦金"], ["0050", "元大台灣50"]],
+    us: [["NVDA", "輝達"], ["AAPL", "蘋果"], ["TSM", "台積電 ADR"], ["VOO", "標普500"], ["QQQ", "那斯達克100"]],
+  };
+  const MARKET_KEY = "eastone.market.v1";
+  const MARKET_TEXT = {
+    tw: { ph: "輸入台股代號或名稱，例如 2330、台積電、00878",
+      title: "一眼看出一檔股票現在是什麼燈",
+      text: "健康面看財報、估值與籌碼，投資面看量價與趨勢，各 5 項指標，<br>每一項都會告訴你落在哪個級距、離下一個燈號還差多少。" },
+    us: { ph: "輸入美股代號或名稱，例如 NVDA、輝達、VOO",
+      title: "美股也一眼看出現在是什麼燈",
+      text: "依 FinMind 每日收盤價（台灣早上 8 點更新），看量價、趨勢與波動 5 項指標，<br>美股沒有財報與法人資料，健康面不計分。常見個股可用中文名搜尋。" },
+  };
 
   let current = null;     // 目前顯示的診斷結果
   let suggestItems = [];
@@ -115,7 +127,7 @@
     if (!q) return hideSuggest();
     searchTimer = setTimeout(async () => {
       try {
-        const list = await FinMind.search(q);
+        const list = await FinMind.search(q, 12, market);
         if (input.value.trim() === q) showSuggest(list);
       } catch (e) { hideSuggest(); }
     }, 150);
@@ -139,7 +151,7 @@
     const q = input.value.trim();
     if (!q) return;
     if (suggestIndex >= 0 && suggestItems[suggestIndex]) return pick(suggestItems[suggestIndex]);
-    if (/^[0-9A-Za-z]+$/.test(q)) return pick({ id: q.toUpperCase() });
+    if (/^[0-9A-Za-z]+([.-][A-Za-z])?$/.test(q)) return pick({ id: q.toUpperCase().replace(".", "-") });
     if (suggestItems.length) return pick(suggestItems[0]);
   }
   function pick(s) {
@@ -167,10 +179,11 @@
 
   // ---------------- 診斷 ----------------
   async function diagnose(id, refresh) {
+    setMarket(Scoring.isUS(id) ? "us" : "tw", true);   // 從自選股或網址進來時，切換鍵跟著跳到對的市場
     show("loading");
     $("loadingText").textContent = refresh
       ? "重新向 FinMind 抓取 " + id + " …"
-      : "診斷 " + id + " 中…正在向 FinMind 抓 5 份資料";
+      : "診斷 " + id + " 中…正在向 FinMind 抓" + (Scoring.isUS(id) ? "美股股價" : Scoring.isEtf(id) ? " ETF 股價" : " 5 份資料");
     try {
       const r = await FinMind.diagnose(id, refresh);
       current = r;
@@ -190,11 +203,14 @@
     const L = r.overall.light;
     setLamp($("heroLamp"), L);
     $("stockName").textContent = r.stock.name || r.stock.id;
+    $("stockName").title = r.stock.en || "";
+    // 美股英文名稱可能很長：字小一點、最多兩行
+    $("stockName").classList.toggle("long", (r.stock.name || "").length > 14);
     $("stockCode").textContent = r.stock.id;
     const tag = $("etfTag"), t = r.etf_type;
     tag.hidden = !t;
     if (t) { tag.textContent = t.label; tag.className = "etf-tag f-" + t.family; }
-    $("close").textContent = fmt(r.price.close);
+    $("close").innerHTML = (r.market === "US" ? '<small class="cur">US$</small>' : "") + fmt(r.price.close);
     const chg = $("change");
     if (r.price.change != null) {
       const up = r.price.change > 0, down = r.price.change < 0;
@@ -207,7 +223,8 @@
     v.textContent = LIGHT_NAME[L] + "｜" + r.overall.verdict;
     $("meta").textContent = "資料日 " + r.as_of + " · " +
       (r.cached ? "快取（" + r.fetched_at + " 抓取）" : "剛抓取 " + r.fetched_at) +
-      (r.etf ? " · ETF：只看投資面" : " · 健康 " + pct(r.weights.health) + " ＋ 投資 " + pct(r.weights.invest));
+      (r.market === "US" ? " · 美股收盤價（台灣早上 8 點更新）：只看投資面"
+        : r.etf ? " · ETF：只看投資面" : " · 健康 " + pct(r.weights.health) + " ＋ 投資 " + pct(r.weights.invest));
 
     // 分數環
     const ring = $("ring");
@@ -218,7 +235,7 @@
 
     $("dimMini").innerHTML = r.dimensions.map((d) =>
       '<span><i class="dot ' + d.light + '"></i>' + d.name + " <b>" +
-      (d.score != null ? Math.round(d.score) : "–") + "</b></span>").join("");
+      (d.excluded ? "不計分" : d.score != null ? Math.round(d.score) : "–") + "</b></span>").join("");
 
     // 左欄：兩個面向的燈號（電腦單一畫面版面使用）
     $("dimLamps").innerHTML = r.dimensions.map((d) =>
@@ -351,7 +368,9 @@
 
   // ---------------- 工具 ----------------
   function show(which) {
-    ["empty", "loading", "error", "result"].forEach((k) => { $(k).hidden = k !== which; });
+    ["empty", "loading", "error", "result", "fund"].forEach((k) => { $(k).hidden = k !== which; });
+    $("watch").hidden = which === "fund";
+    document.querySelector(".search-row").hidden = which === "fund";
     document.body.classList.toggle("has-result", which === "result");
   }
   function fmt(v) {
@@ -416,13 +435,51 @@
     navigator.serviceWorker.register("sw.js").catch(() => { /* 沒有也能用 */ });
   }
 
+  // ---------------- 台股／美股／基金切換 ----------------
+  let market = "tw";
+  try { market = localStorage.getItem(MARKET_KEY) || "tw"; } catch (e) { /* ignore */ }
+  if (!QUICK[market] && market !== "fund") market = "tw";
+
+  function paintQuick() {
+    $("quick").innerHTML = (QUICK[market] || []).map(([id, name]) =>
+      '<button class="ghost" type="button" data-id="' + id + '">' + id + " " + name + "</button>").join("");
+    $("quick").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      input.value = b.textContent; diagnose(b.dataset.id);
+    }));
+  }
+  // quiet：診斷時自動跟著切，不改變目前畫面
+  function setMarket(m, quiet) {
+    const changed = m !== market;
+    market = m;
+    try { localStorage.setItem(MARKET_KEY, m); } catch (e) { /* ignore */ }
+    $("marketTabs").querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.m === m);
+      b.setAttribute("aria-pressed", b.dataset.m === m);
+    });
+    const t = MARKET_TEXT[m];
+    if (t) {
+      input.placeholder = t.ph;
+      $("emptyTitle").textContent = t.title;
+      $("emptyText").innerHTML = t.text;
+      paintQuick();
+    }
+    if (quiet) return;
+    hideSuggest();
+    if (m === "fund") return show("fund");
+    if (changed) { input.value = ""; }
+    // 目前顯示的股票屬於這個市場就留著，否則回到起始畫面
+    if (current && (current.market === "US") === (m === "us")) show("result");
+    else { show("empty"); if (location.hash) history.replaceState(null, "", location.pathname); }
+    if (m === "us") FinMind.loadUSList().catch(() => { /* 搜尋時會再試 */ });
+  }
+  $("marketTabs").querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => setMarket(b.dataset.m)));
+
   // ---------------- 啟動 ----------------
   FinMind.loadStockList().catch(() => { /* 搜尋時會再試 */ });
-  $("quick").innerHTML = QUICK.map(([id, name]) =>
-    '<button class="ghost" type="button" data-id="' + id + '">' + id + " " + name + "</button>").join("");
-  $("quick").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-    input.value = b.textContent; diagnose(b.dataset.id);
-  }));
+  setMarket(market, true);
+  if (market === "fund") show("fund");
+  else if (market === "us") FinMind.loadUSList().catch(() => { /* 搜尋時會再試 */ });
   renderWatch();
   // 自選股裡用舊算法算的分數，開啟後自動在背景重算（不必一檔一檔點）
   setTimeout(() => refreshWatch(true), 1500);

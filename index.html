@@ -25,6 +25,11 @@
       <img src="assets/icon.png" alt="">
       <span>東石診股</span>
     </a>
+    <nav class="market-tabs" id="marketTabs" aria-label="切換市場">
+      <button type="button" data-m="tw" class="on">台股</button>
+      <button type="button" data-m="us">美股</button>
+      <button type="button" data-m="fund">基金</button>
+    </nav>
     <button id="installBtn" class="ghost install-btn" type="button" hidden>安裝 APP</button>
     <button id="tokenBtn" class="ghost token-btn" type="button">金鑰</button>
   </header>
@@ -62,7 +67,7 @@
     <section class="search-row">
       <div class="search">
         <input id="q" type="text" autocomplete="off" spellcheck="false"
-               placeholder="輸入股票代號或公司名稱，例如 2330、台積電">
+               placeholder="輸入代號或名稱，例如 2330、台積電、NVDA、輝達">
         <button id="go" type="button">診斷</button>
         <ul id="suggest" class="suggest" hidden></ul>
       </div>
@@ -80,9 +85,16 @@
       <div class="lamp-house big demo" aria-hidden="true">
         <i class="lamp red"></i><i class="lamp yellow"></i><i class="lamp green"></i>
       </div>
-      <h1>一眼看出一檔股票現在是什麼燈</h1>
-      <p>健康面看財報、估值與籌碼，投資面看量價與趨勢，各 5 項指標，<br>每一項都會告訴你落在哪個級距、離下一個燈號還差多少。</p>
+      <h1 id="emptyTitle">一眼看出一檔股票現在是什麼燈</h1>
+      <p id="emptyText">健康面看財報、估值與籌碼，投資面看量價與趨勢，各 5 項指標，<br>每一項都會告訴你落在哪個級距、離下一個燈號還差多少。</p>
       <div class="quick" id="quick"></div>
+    </section>
+
+    <section id="fund" class="empty fund-soon" hidden>
+      <div class="fund-badge">籌備中</div>
+      <h1>基金淨值</h1>
+      <p>投資型保單連結的境內、境外基金，淨值每天自動更新，<br>一樣用走勢、報酬率與波動來看燈號。</p>
+      <p class="small">目前正在確認穩定的官方資料來源，接好後就會在這裡上線。</p>
     </section>
 
     <section id="loading" class="loading" hidden>

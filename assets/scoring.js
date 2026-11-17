@@ -207,19 +207,21 @@
   // ---------------------------------------------------------------------------
   // 投資面（技術面）
   // ---------------------------------------------------------------------------
+  // 台股欄位：close / Trading_Volume / spread；美股欄位：Close / Volume，沒有漲跌，用前一日收盤自己算
   function preparePrice(daily) {
     const rows = daily.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const close = rows.map((r) => Number(r.close != null ? r.close : r.Close));
     const p = {
       date: rows.map((r) => r.date),
-      close: rows.map((r) => Number(r.close)),
-      volume: rows.map((r) => Number(r.Trading_Volume)),
-      spread: rows.map((r) => (r.spread == null ? null : Number(r.spread))),
+      close,
+      volume: rows.map((r) => Number(r.Trading_Volume != null ? r.Trading_Volume : r.Volume)),
+      spread: rows.map((r, i) => (r.spread != null ? Number(r.spread) : i > 0 ? close[i] - close[i - 1] : null)),
     };
     [5, 20, 60, 120, 240].forEach((n) => { p["MA" + n] = rolling(p.close, n, avg); });
     return p;
   }
 
-  function investItems(p, warnings, item) {
+  function investItems(p, warnings, item, us) {
     const n = p.close.length, L = n - 1, c = p.close, v = p.volume;
     if (n < 260) warnings.push("上市未滿一年，部分技術指標（MA240、波動比）資料不足");
 
@@ -232,7 +234,7 @@
     // 1. 供需：今日量 / 20 日均量
     const volRatio20 = v[L] / rolling(v, 20, avg)[L];
     items.push(item("supply", "供需（量 / 20日均量）", volRatio20, volRatio20.toFixed(2) + " 倍", BANDS.supply,
-      "今日成交 " + fmtInt(v[L] / 1000) + " 張", mult, multNote));
+      "今日成交 " + (us ? fmtInt(v[L] / 10000) + " 萬股" : fmtInt(v[L] / 1000) + " 張"), mult, multNote));
 
     // 2. 趨勢：均線排列 + 均線方向
     const MAS = ["MA5", "MA20", "MA60", "MA120", "MA240"];
@@ -303,12 +305,15 @@
     const warnings = [];
     const price = preparePrice(bundle.daily);
     // 00 開頭是台灣 ETF：沒有單一公司的財報與估值，健康面不適用，綜合分只看投資面
+    // 美股：FinMind 免費資料只有股價，沒有財報、本益比與法人資料，同樣只看投資面
+    const us = isUS(stockId);
     const etf = isEtf(stockId);
-    const health = etf ? [] : healthItems(bundle, warnings, item);
-    const invest = investItems(price, warnings, item);
-    const weights = etf ? { health: 0, invest: 1 } : { health: cfg.healthWeight, invest: cfg.investWeight };
+    const investOnly = etf || us;
+    const health = investOnly ? [] : healthItems(bundle, warnings, item);
+    const invest = investItems(price, warnings, item, us);
+    const weights = investOnly ? { health: 0, invest: 1 } : { health: cfg.healthWeight, invest: cfg.investWeight };
 
-    const hScore = etf ? null : mean(health.map((i) => i.score));
+    const hScore = investOnly ? null : mean(health.map((i) => i.score));
     const iScore = mean(invest.map((i) => i.score));
     const parts = [[hScore, weights.health], [iScore, weights.invest]].filter(([s, w]) => isNum(s) && w > 0);
     const overall = parts.length ? sum(parts.map(([s, w]) => s * w)) / sum(parts.map(([, w]) => w)) : null;
@@ -331,12 +336,15 @@
       overall: { score: round(overall, 1), light: overallLight, verdict: VERDICT[overallLight] },
       weights,
       etf,
-      etf_type: etfType(stockId),
+      market: us ? "US" : "TW",
+      us_etf: us && !!bundle.usEtf,
+      etf_type: us ? { code: "", label: bundle.usEtf ? "美股 ETF" : "美股", family: "us", foreign: true } : etfType(stockId),
       thresholds: { green: cfg.greenAt, yellow: cfg.yellowAt },
       dimensions: [
-        { key: "health", name: "健康面", sub: etf ? "ETF 不適用" : "財報 · 估值 · 籌碼", score: round(hScore, 1),
-          light: light(hScore), items: health, excluded: etf,
-          note: etf ? "ETF 是一籃子股票，沒有單一公司的財報、本益比與法人連買可評，因此不計入綜合分。" : "" },
+        { key: "health", name: "健康面", sub: us ? "美股不適用" : etf ? "ETF 不適用" : "財報 · 估值 · 籌碼", score: round(hScore, 1),
+          light: light(hScore), items: health, excluded: investOnly,
+          note: us ? "美股目前只接了 FinMind 的每日股價，沒有財報、本益比與三大法人資料（法人買賣超是台股專屬），因此健康面不計入綜合分。"
+            : etf ? "ETF 是一籃子股票，沒有單一公司的財報、本益比與法人連買可評，因此不計入綜合分。" : "" },
         { key: "invest", name: "投資面", sub: "量價 · 趨勢 · 波動", score: round(iScore, 1), light: light(iScore), items: invest },
       ],
       chart: {
@@ -349,6 +357,8 @@
 
   // 台灣 ETF 代號一律 00 開頭（例如 0050、00878）
   function isEtf(stockId) { return /^00/.test(String(stockId || "")); }
+  // 美股代號是英文字母開頭（AAPL、BRK-B）；台股一律數字開頭
+  function isUS(stockId) { return /^[A-Za-z]/.test(String(stockId || "")); }
 
   // ETF 代號結尾的英文字母代表類別，例如 00679B、00631L、00632R、00635U、00980A
   // family 只用來決定標籤顏色：bond 債券、lev 槓桿、inv 反向、fut 期貨、active 主動、mix 平衡、stock 股票
@@ -381,7 +391,7 @@
   // 2：00 開頭 ETF 只看投資面（2026-11-09）
   const VERSION = 2;
 
-  const api = { diagnose, BANDS, DEFAULTS, isEtf, etfType, VERSION };
+  const api = { diagnose, BANDS, DEFAULTS, isEtf, isUS, etfType, VERSION };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Scoring = api;
 })(typeof self !== "undefined" ? self : this);

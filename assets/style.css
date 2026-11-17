@@ -443,3 +443,31 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .etf-tag.f-fut  { color: #0F8B8D; border-color: #0F8B8D; background: color-mix(in srgb, #0F8B8D 10%, var(--card)); }
 .etf-tag.f-mix  { color: #6B6656; border-color: #9A927D; background: var(--seg); }
 .etf-tag.f-other { color: var(--muted); border-color: var(--line); background: var(--seg); }
+
+/* 美股標籤與長英文名稱 */
+.etf-tag.f-us { color: #B42318; border-color: #B42318; background: color-mix(in srgb, #B42318 9%, var(--card)); }
+.hero-name h2.long { font-size: 20px !important; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.price #close, .price .chg { white-space: nowrap; }
+.price #close .cur { font-size: .55em; font-weight: 700; color: var(--muted); margin-right: 4px; }
+.price { flex-wrap: wrap; row-gap: 2px; }
+.hero-main { min-width: 0; }
+
+/* 頂部：台股／美股／基金切換 */
+.market-tabs { display: flex; gap: 2px; margin-left: 14px; padding: 3px; border-radius: 999px;
+  background: rgba(246,243,236,.08); border: 1px solid rgba(246,243,236,.18); }
+.market-tabs button { border: 0; background: transparent; color: rgba(246,243,236,.75); font-size: 14px; font-weight: 700;
+  padding: 5px 14px; border-radius: 999px; line-height: 1.2; white-space: nowrap; }
+.market-tabs button:hover { color: #E9C46A; }
+.market-tabs button.on { background: #E9C46A; color: #121D33; }
+@media (max-width: 520px) {
+  .brand span { font-size: 18px; }
+  .brand img { height: 30px; }
+  .market-tabs { margin-left: 6px; }
+  .market-tabs button { padding: 5px 9px; font-size: 13px; }
+}
+@media (max-width: 359px) { .brand span { display: none; } }
+/* 基金（籌備中） */
+.fund-soon .fund-badge { display: inline-block; font-size: 13px; font-weight: 900; color: #121D33; background: #E9C46A;
+  border-radius: 999px; padding: 3px 14px; }
+.fund-soon h1 { margin-top: 14px; }
+.fund-soon .small { margin-top: 12px; font-size: 13px; color: var(--faint); }

@@ -55,6 +55,11 @@
   // 一次診斷需要的 5 份資料，同時發出
   async function fetchBundle(id) {
     const p = (dataset, start) => get(dataset, { data_id: id, start_date: daysAgo(start) });
+    // 美股：FinMind 免費版只有每日股價（美東收盤後、台灣早上 8 點更新），只抓 1 份
+    if (root.Scoring.isUS(id)) {
+      const [daily, info] = await Promise.all([p("USStockPrice", 800), usInfo(id)]);
+      return { daily, income: [], balance: [], per: [], inst: [], usEtf: !!(info && info.etf) };
+    }
     // ETF 只看投資面：不必抓財報、資產負債表、本益比與法人資料，省下 4 次查詢
     if (root.Scoring.isEtf(id)) return { daily: await p("TaiwanStockPrice", 800), income: [], balance: [], per: [], inst: [] };
     const [daily, income, balance, per, inst] = await Promise.all([
@@ -110,22 +115,115 @@
     return listPromise;
   }
 
-  async function search(query, limit) {
+  // ---- 美股清單（英文代號、英文名稱，常見個股與 ETF 另附中文名）----
+  const US_KEY = "eastone.usList.v1";
+  // 中文俗名：搜尋「輝達」「蘋果」也找得到；顯示時優先用中文名
+  const US_ZH = {
+    AAPL: "蘋果", MSFT: "微軟", NVDA: "輝達", GOOGL: "谷歌 A", GOOG: "谷歌 C", AMZN: "亞馬遜", META: "Meta（臉書）",
+    TSLA: "特斯拉", TSM: "台積電 ADR", AVGO: "博通", AMD: "超微", INTC: "英特爾", QCOM: "高通", MU: "美光",
+    ASML: "艾司摩爾", ARM: "安謀", SMCI: "美超微", ORCL: "甲骨文", ADBE: "Adobe", CRM: "Salesforce",
+    NFLX: "網飛", PLTR: "Palantir", COST: "好市多", WMT: "沃爾瑪", KO: "可口可樂", PEP: "百事", MCD: "麥當勞",
+    SBUX: "星巴克", NKE: "耐吉", DIS: "迪士尼", JPM: "摩根大通", BAC: "美國銀行", GS: "高盛", V: "Visa", MA: "萬事達卡",
+    "BRK-B": "波克夏 B", LLY: "禮來", NVO: "諾和諾德", UNH: "聯合健康", PFE: "輝瑞", JNJ: "嬌生", XOM: "埃克森美孚",
+    BA: "波音", UBER: "Uber", ASX: "日月光 ADR", UMC: "聯電 ADR",
+    SPY: "SPDR 標普500 ETF", VOO: "先鋒標普500 ETF", IVV: "iShares 標普500 ETF", QQQ: "那斯達克100 ETF",
+    VTI: "先鋒全美股市 ETF", VT: "先鋒全球股市 ETF", DIA: "道瓊工業 ETF", SOXX: "費城半導體 ETF", SMH: "半導體 ETF",
+    SCHD: "嘉信美國高股息 ETF", VYM: "先鋒高股息 ETF", TLT: "20年以上美債 ETF", IEF: "7-10年美債 ETF",
+    BND: "先鋒總體債券 ETF", SHY: "1-3年美債 ETF", GLD: "黃金 ETF", VNQ: "先鋒房地產 ETF",
+  };
+  const US_ETF_EXTRA = ["SPY", "VOO", "IVV", "QQQ", "VTI", "VT", "DIA", "SOXX", "SMH", "SCHD", "VYM", "TLT", "IEF", "BND", "SHY", "GLD", "VNQ"];
+  // 名稱去掉 Common Stock 等股別字樣，比較好讀
+  const cleanName = (n) => String(n || "").replace(/\s+(Class [A-Z]\s+)?(Common Stock|Ordinary Shares|Common Shares|Capital Stock|Subordinate Voting Shares).*$/i, "")
+    .replace(/\s+American Depositary Shares.*$/i, " ADR").trim();
+
+  let usPromise = null;
+  function loadUSList() {
+    if (usPromise) return usPromise;
+    const cached = store.get(US_KEY);
+    if (cached) {
+      try {
+        const c = JSON.parse(cached);
+        if (Date.now() - c.t < LIST_TTL && c.rows.length) return (usPromise = Promise.resolve(c.rows));
+      } catch (e) { /* 壞掉就重抓 */ }
+    }
+    usPromise = get("USStockInfo").then((data) => {
+      // 清單裡有不少多年沒更新的舊代號（已下市或改代號），只留最新一天出現的
+      const newest = data.reduce((m, r) => (r.date > m ? r.date : m), "");
+      const seen = new Set(), rows = [];
+      data.forEach((r) => {
+        if (r.date !== newest || seen.has(r.stock_id)) return;
+        seen.add(r.stock_id);
+        rows.push([r.stock_id, cleanName(r.stock_name), r.Subsector === "ETF" ? "ETF" : (r.Subsector === "n/a" ? "" : r.Subsector)]);
+      });
+      // 中文表裡有、清單卻沒有的（例如波克夏報價代號是 BRK-B）補進去
+      Object.keys(US_ZH).forEach((id) => { if (!seen.has(id)) rows.push([id, "", US_ETF_EXTRA.includes(id) ? "ETF" : ""]); });
+      store.set(US_KEY, JSON.stringify({ t: Date.now(), rows }));
+      return rows;
+    }).catch((e) => {
+      usPromise = null;
+      if (cached) { try { return JSON.parse(cached).rows; } catch (x) { /* fallthrough */ } }
+      throw e;
+    });
+    return usPromise;
+  }
+  const usDisplay = (id, en) => US_ZH[id] || en || id;
+
+  async function usInfo(id) {
+    try {
+      const hit = (await loadUSList()).find((r) => r[0] === id);
+      if (!hit) return US_ZH[id] ? { name: US_ZH[id], etf: US_ETF_EXTRA.includes(id) } : null;
+      return { name: usDisplay(id, hit[1]), en: hit[1], etf: hit[2] === "ETF" };
+    } catch (e) { return null; }
+  }
+
+  function searchUS(rows, q, qu) {
+    const ql = q.toLowerCase();
+    const hits = [];
+    rows.forEach(([id, en, sector]) => {
+      const zh = US_ZH[id] || "";
+      let rank = -1;
+      if (id === qu || zh === q) rank = 0;                     // 完全相符
+      else if (id.startsWith(qu)) rank = 1 + id.length / 100;  // 代號開頭相符，短的優先
+      else if (zh && zh.includes(q)) rank = 2;                 // 中文俗名
+      else if (q.length >= 2 && en.toLowerCase().includes(ql)) rank = 3;   // 英文名稱
+      if (rank >= 0) hits.push([rank, id, en, zh, sector]);
+    });
+    hits.sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : 1));
+    return hits.map(([, id, en, zh, sector]) => ({
+      id, name: zh ? zh + (en ? " · " + en : "") : en, industry: "美股" + (sector ? " · " + sector : ""), market: "US",
+    }));
+  }
+
+  // market：tw 只找台股、us 只找美股，沒給就兩邊都找
+  async function search(query, limit, market) {
     const q = (query || "").trim();
     if (!q) return [];
-    const rows = await loadStockList();
-    const qu = q.toUpperCase();                       // 00679b 也找得到 00679B
-    const hits = rows.filter(([id, name]) => id.startsWith(qu) || name.includes(q));
-    hits.sort((a, b) => {
-      const ea = a[0] === qu || a[1] === q, eb = b[0] === qu || b[1] === q;
-      if (ea !== eb) return ea ? -1 : 1;                 // 完全相符優先
-      if (a[0].length !== b[0].length) return a[0].length - b[0].length;  // 普通股優先於權證
-      return a[0] < b[0] ? -1 : 1;
-    });
-    return hits.slice(0, limit || 12).map(([id, name, industry]) => ({ id, name, industry }));
+    const qu = q.toUpperCase();                       // 00679b 也找得到 00679B；aapl 也找得到 AAPL
+    const n = limit || 12;
+    const latin = /^[A-Za-z]/.test(q);                // 英文開頭：先找美股
+    const hasZh = /[^\x00-\x7F]/.test(q);
+    const wantUS = market !== "tw", wantTW = market !== "us";
+    let us = [];
+    if (wantUS && (market === "us" || latin || (hasZh && Object.keys(US_ZH).some((id) => US_ZH[id].includes(q))))) {
+      try { us = searchUS(await loadUSList(), q, qu); } catch (e) { us = []; }
+    }
+    let tw = [];
+    if (wantTW && (!latin || us.length < n || market === "tw")) {
+      const rows = await loadStockList();
+      const hits = rows.filter(([id, name]) => id.startsWith(qu) || name.includes(q));
+      hits.sort((a, b) => {
+        const ea = a[0] === qu || a[1] === q, eb = b[0] === qu || b[1] === q;
+        if (ea !== eb) return ea ? -1 : 1;                 // 完全相符優先
+        if (a[0].length !== b[0].length) return a[0].length - b[0].length;  // 普通股優先於權證
+        return a[0] < b[0] ? -1 : 1;
+      });
+      tw = hits.map(([id, name, industry]) => ({ id, name, industry }));
+    }
+    return (latin ? us.concat(tw) : tw.concat(us)).slice(0, n);
   }
 
   async function stockName(id) {
+    if (root.Scoring.isUS(id)) { const i = await usInfo(id); return i ? i.name : ""; }
     try { const hit = (await loadStockList()).find((r) => r[0] === id); return hit ? hit[1] : ""; }
     catch (e) { return ""; }
   }
@@ -143,10 +241,11 @@
     if (hit && !refresh && Date.now() - hit.t < RESULT_TTL) return Object.assign({}, hit.r, { cached: true });
     const [bundle, name] = await Promise.all([fetchBundle(id), stockName(id)]);
     const r = root.Scoring.diagnose(id, bundle, name);
+    if (root.Scoring.isUS(id)) { const i = await usInfo(id); if (i && i.en && i.en !== r.stock.name) r.stock.en = i.en; }
     r.fetched_at = stamp();
     cache.set(id, { t: Date.now(), r });
     return Object.assign({}, r, { cached: false });
   }
 
-  root.FinMind = { getToken, setToken, search, diagnose, loadStockList };
+  root.FinMind = { getToken, setToken, search, diagnose, loadStockList, loadUSList };
 })(self);
