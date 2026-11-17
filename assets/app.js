@@ -8,6 +8,11 @@
     tw: [["2330", "台積電"], ["2317", "鴻海"], ["2454", "聯發科"], ["2881", "富邦金"], ["0050", "元大台灣50"]],
     us: [["NVDA", "輝達"], ["AAPL", "蘋果"], ["TSM", "台積電 ADR"], ["VOO", "標普500"], ["QQQ", "那斯達克100"]],
   };
+  const FUND_QUICK = [["F-AGIF-FVM", "安聯收益成長 AM 美元"], ["F-BLKTEPMA", "貝萊德世界科技 A2 美元"],
+    ["F-JFPATT", "摩根太平洋科技 美元"], ["T-18480065", "安聯台灣科技"], ["T-92002244", "統一黑馬"]];
+  const FUND_WATCH_KEY = "eastone.fundwatch.v1";
+  const CUR_NAME = { TWD: "新台幣", USD: "美元", EUR: "歐元", JPY: "日圓", AUD: "澳幣", ZAR: "南非幣", CNY: "人民幣", RMB: "人民幣",
+    CNH: "人民幣", GBP: "英鎊", HKD: "港幣", SGD: "新加坡幣", NZD: "紐幣", CAD: "加幣", CHF: "瑞士法郎", SEK: "瑞典克朗" };
   const MARKET_KEY = "eastone.market.v1";
   const MARKET_TEXT = {
     tw: { ph: "輸入台股代號或名稱，例如 2330、台積電、00878",
@@ -16,6 +21,7 @@
     us: { ph: "輸入美股代號或名稱，例如 NVDA、輝達、VOO",
       title: "美股也一眼看出現在是什麼燈",
       text: "依 FinMind 每日收盤價（台灣早上 8 點更新），看量價、趨勢與波動 5 項指標，<br>美股沒有財報與法人資料，健康面不計分。常見個股可用中文名搜尋。" },
+    fund: { ph: "輸入基金名稱、投信或 ISIN，例如「安聯 收益成長」「貝萊德 科技 美元」" },
   };
 
   let current = null;     // 目前顯示的診斷結果
@@ -47,6 +53,7 @@
   }
 
   function renderWatch() {
+    if (typeof market !== "undefined" && market === "fund") return renderFundWatch();
     const box = $("chips");
     box.innerHTML = "";
     $("refreshAll").hidden = watch.length === 0;
@@ -117,7 +124,7 @@
     btn.textContent = "全部更新"; btn.disabled = false;
     refreshing = false;
   }
-  $("refreshAll").addEventListener("click", () => refreshWatch(false));
+  $("refreshAll").addEventListener("click", () => (market === "fund" ? refreshFundWatch(false) : refreshWatch(false)));
 
   // ---------------- 搜尋與自動完成 ----------------
   const input = $("q");
@@ -127,7 +134,10 @@
     if (!q) return hideSuggest();
     searchTimer = setTimeout(async () => {
       try {
-        const list = await FinMind.search(q, 12, market);
+        const list = market === "fund"
+          ? (await Funds.search(q, 12)).map((f) => ({ id: f.id, fund: true, label: f.kind + " " + f.currency,
+            name: f.name, industry: f.company.replace(/證券投資信託股份有限公司|投信$/, "") }))
+          : await FinMind.search(q, 12, market);
         if (input.value.trim() === q) showSuggest(list);
       } catch (e) { hideSuggest(); }
     }, 150);
@@ -151,11 +161,13 @@
     const q = input.value.trim();
     if (!q) return;
     if (suggestIndex >= 0 && suggestItems[suggestIndex]) return pick(suggestItems[suggestIndex]);
+    if (market === "fund") { if (suggestItems.length) pick(suggestItems[0]); return; }
     if (/^[0-9A-Za-z]+([.-][A-Za-z])?$/.test(q)) return pick({ id: q.toUpperCase().replace(".", "-") });
     if (suggestItems.length) return pick(suggestItems[0]);
   }
   function pick(s) {
     hideSuggest();
+    if (s.fund) { input.value = s.name; input.blur(); return openFund(s.id); }
     input.value = s.name ? s.id + " " + s.name : s.id;
     input.blur();
     diagnose(s.id);
@@ -169,7 +181,7 @@
     const ul = $("suggest");
     if (!suggestItems.length) return hideSuggest();
     ul.innerHTML = suggestItems.map((s, i) =>
-      '<li data-i="' + i + '" class="' + (i === suggestIndex ? "on" : "") + '"><b>' + esc(s.id) +
+      '<li data-i="' + i + '" class="' + (i === suggestIndex ? "on" : "") + (s.fund ? " fund" : "") + '"><b>' + esc(s.label || s.id) +
       "</b><span>" + esc(s.name) + "</span><small>" + esc(s.industry || "") + "</small></li>").join("");
     ul.hidden = false;
     ul.querySelectorAll("li").forEach((li) =>
@@ -289,18 +301,21 @@
     ["MA240", "MA240", "--c-ma240", 1.4],
   ];
 
-  function renderChart(c) {
-    const box = $("chart");
+  // opts：box / legend 是元素 id，series 是要畫的線；基金頁共用同一支
+  function renderChart(c, opts) {
+    const o = Object.assign({ box: "chart", legend: "legend", series: SERIES, fit: true }, opts || {});
+    const SERIES_ = o.series;
+    const box = $(o.box);
     // 依實際寬度繪製（不縮放），手機上文字才不會被壓扁
     const W = Math.max(280, Math.round(box.clientWidth || 1000));
     // 電腦單一畫面版面：圖表高度跟著剩下的空間走；其他情況維持固定高度
-    const fitH = document.body.classList.contains("has-result") && matchMedia(FIT_QUERY).matches
+    const fitH = o.fit && document.body.classList.contains("has-result") && matchMedia(FIT_QUERY).matches
       ? Math.max(80, Math.round(box.clientHeight)) : 0;
     const H = fitH || (W < 600 ? 220 : 300), padL = 4, padR = 52, padT = 12, padB = 26;
     const n = c.dates.length;
     if (n < 2) { box.innerHTML = ""; return; }
     let lo = Infinity, hi = -Infinity;
-    SERIES.forEach(([k]) => c[k].forEach((v) => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+    SERIES_.forEach(([k]) => c[k].forEach((v) => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
     const span = hi - lo || 1; lo -= span * 0.05; hi += span * 0.05;
     const x = (i) => padL + (i / (n - 1)) * (W - padL - padR);
     const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
@@ -323,7 +338,7 @@
         lastMonth = m;
       }
     });
-    SERIES.slice().reverse().forEach(([k, , color, w]) => {
+    SERIES_.slice().reverse().forEach(([k, , color, w]) => {
       let d = "", pen = false;
       c[k].forEach((v, i) => {
         if (v == null) { pen = false; return; }
@@ -333,14 +348,14 @@
       svg += '<path d="' + d + '" fill="none" stroke="var(' + color + ')" stroke-width="' + w +
         '" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
     });
-    svg += '<line class="cross" id="cross" y1="' + padT + '" y2="' + (H - padB) + '" visibility="hidden" vector-effect="non-scaling-stroke"/>';
-    svg += '<rect id="hit" x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/></svg>';
-    box.innerHTML = svg + '<div class="tip" id="tip" hidden></div>';
+    svg += '<line class="cross" y1="' + padT + '" y2="' + (H - padB) + '" visibility="hidden" vector-effect="non-scaling-stroke"/>';
+    svg += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/></svg>';
+    box.innerHTML = svg + '<div class="tip" hidden></div>';
 
-    $("legend").innerHTML = SERIES.map(([, label, color]) =>
+    $(o.legend).innerHTML = SERIES_.map(([, label, color]) =>
       '<span><i style="background:var(' + color + ')"></i>' + label + "</span>").join("");
 
-    const svgEl = box.querySelector("svg"), cross = $("cross"), tip = $("tip");
+    const svgEl = box.querySelector("svg"), cross = box.querySelector(".cross"), tip = box.querySelector(".tip");
     const move = (clientX) => {
       const rect = svgEl.getBoundingClientRect();
       const px = ((clientX - rect.left) / rect.width) * W;
@@ -348,7 +363,7 @@
       cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
       cross.setAttribute("visibility", "visible");
       tip.hidden = false;
-      tip.innerHTML = "<b>" + c.dates[i] + "</b>" + SERIES.map(([k, label]) =>
+      tip.innerHTML = "<b>" + c.dates[i] + "</b>" + SERIES_.map(([k, label]) =>
         "<span>" + label + "<em>" + (c[k][i] != null ? fmt(c[k][i]) : "–") + "</em></span>").join("");
       const left = (x(i) / W) * rect.width;
       tip.style.left = (left > rect.width / 2 ? left - tip.offsetWidth - 12 : left + 12) + "px";
@@ -363,14 +378,167 @@
   let resizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (current && !$("result").hidden) renderChart(current.chart); }, 150);
+    resizeTimer = setTimeout(() => {
+      if (current && !$("result").hidden) renderChart(current.chart);
+      if (currentFund && !$("fundResult").hidden) renderFundChart(currentFund);
+    }, 150);
   });
+
+  // ---------------- 基金 ----------------
+  let currentFund = null;
+  let fundWatch = (() => { try { return JSON.parse(localStorage.getItem(FUND_WATCH_KEY)) || []; } catch (e) { return []; } })();
+  const saveFundWatch = () => { try { localStorage.setItem(FUND_WATCH_KEY, JSON.stringify(fundWatch)); } catch (e) { /* ignore */ } };
+  const fmtNav = (v) => (v == null || isNaN(v) ? "–" : v.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: v >= 1000 ? 2 : 4 }));
+  const fmtPctS = (x, d) => (x > 0 ? "+" : "") + (x * 100).toFixed(d == null ? 2 : d) + "%";
+  const curName = (c) => CUR_NAME[c] || c || "";
+  const shortName = (n) => (n.length > 16 ? n.slice(0, 15) + "…" : n);
+
+  async function openFund(id, refresh) {
+    setMarket("fund", true);
+    show("loading");
+    $("loadingText").textContent = "讀取基金淨值…";
+    try {
+      const idx = await Funds.loadIndex(refresh);
+      const f = idx.byId.get(id);
+      if (!f) throw new Error("找不到這檔基金（" + id + "）：可能已清算、合併或改名");
+      const h = await Funds.history(id);
+      if (!h.length) throw new Error("這檔基金還沒有淨值資料");
+      currentFund = { f, h, s: Funds.stats(h), updated: idx.updated };
+      renderFund(currentFund);
+      upsertFundWatch(currentFund);
+      renderWatch();
+      history.replaceState(null, "", "#fund/" + id);
+    } catch (e) {
+      show("error");
+      $("error").textContent = e.message;
+    }
+  }
+  $("fRefreshBtn").addEventListener("click", () => currentFund && openFund(currentFund.f.id, true));
+
+  function renderFund(cf) {
+    const { f, s } = cf;
+    show("fundResult");
+    const kind = $("fKind");
+    kind.textContent = f.kind + "基金"; kind.className = "etf-tag " + (f.kind === "境外" ? "f-bond" : "");
+    $("fCur").textContent = curName(f.currency) + (f.currency && CUR_NAME[f.currency] ? " " + f.currency : "");
+    $("fName").textContent = f.name;
+    $("fName").classList.toggle("long", f.name.length > 18);
+    $("fCo").textContent = [f.company, f.isin && "ISIN " + f.isin, f.ticker && "代號 " + f.ticker].filter(Boolean).join(" · ");
+    $("fNav").innerHTML = '<small class="cur">' + esc(f.currency) + "</small>" + fmtNav(s.nav);
+    const chg = $("fChg");
+    if (s.change != null) {
+      const up = s.change > 0, down = s.change < 0;
+      chg.className = "chg " + (up ? "up" : down ? "down" : "");
+      chg.textContent = (up ? "▲ " : down ? "▼ " : "") + fmtNav(Math.abs(s.change)) + "（" + fmtPctS(s.change_pct) + "）";
+    } else { chg.className = "chg"; chg.textContent = "前一日淨值累積中"; }
+    const late = (Date.now() - Date.parse(s.date)) / 86400000 > 4;
+    $("fMeta").textContent = "淨值日 " + s.date + " · 已收集 " + s.count + " 筆淨值（自 " + s.since + " 起）" +
+      (late && f.kind === "境外" ? " · 境外基金淨值由總代理申報，約晚 2–5 天公布" : "");
+
+    $("fRets").innerHTML = s.periods.map((p) => {
+      const v = p.value;
+      const cls = v == null ? "na" : v > 0 ? "up" : v < 0 ? "down" : "";
+      return '<div class="ret ' + cls + '"><small>' + p.label + "</small><b>" + (v == null ? "累積中" : fmtPctS(v)) + "</b></div>";
+    }).join("") + '<div class="ret ' + (s.vol == null ? "na" : "") + '"><small>年化波動度</small><b>' +
+      (s.vol == null ? "累積中" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
+
+    const pct = Math.min(100, Math.round((s.span / 365) * 100));
+    $("fLamp").innerHTML = '<div class="fl-head"><b>燈號評分</b><span>資料累積中</span></div>' +
+      '<div class="fl-bar"><i style="width:' + Math.max(2, pct) + '%"></i></div>' +
+      '<p>已累積 ' + s.span + " 天的淨值。滿 3 個月可看近期報酬與波動，滿 1 年後再依走勢、報酬與波動給燈號。</p>";
+
+    renderFundChart(cf);
+    updateFundWatchBtn();
+  }
+
+  const FUND_SERIES = [["close", "淨值", "--c-close", 2], ["MA20", "20日均", "--c-ma20", 1.4]];
+  function renderFundChart(cf) {
+    const h = cf.h, n = h.length;
+    const navs = h.map((p) => p[1]);
+    const ma = navs.map((_, i) => (i >= 19 ? navs.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20 : null));
+    const from = Math.max(0, n - 250);
+    const c = { dates: h.slice(from).map((p) => p[0]), close: navs.slice(from), MA20: ma.slice(from) };
+    const series = n >= 20 ? FUND_SERIES : FUND_SERIES.slice(0, 1);
+    if (n >= 2) renderChart(c, { box: "fChart", legend: "fLegend", series, fit: false });
+    else { $("fChart").innerHTML = ""; $("fLegend").innerHTML = ""; }
+    $("fChartNote").textContent = n < 20
+      ? "目前有 " + n + " 筆淨值（" + h[0][0] + " ～ " + h[n - 1][0] + "），走勢圖會隨每天收集慢慢變完整。"
+      : "近 " + Math.min(n, 250) + " 筆淨值（" + c.dates[0] + " ～ " + c.dates[c.dates.length - 1] + "）";
+  }
+
+  // ---- 自選基金（和股票分開存）----
+  function fundEntry(cf) {
+    return { id: cf.f.id, name: cf.f.name, cur: cf.f.currency, nav: cf.s.nav, pct: cf.s.change_pct, date: cf.s.date };
+  }
+  function upsertFundWatch(cf) {
+    const i = fundWatch.findIndex((w) => w.id === cf.f.id);
+    if (i >= 0) { fundWatch[i] = fundEntry(cf); saveFundWatch(); }
+  }
+  function updateFundWatchBtn() {
+    if (!currentFund) return;
+    $("fWatchBtn").textContent = fundWatch.some((w) => w.id === currentFund.f.id) ? "★ 已在自選" : "☆ 加入自選";
+  }
+  $("fWatchBtn").addEventListener("click", () => {
+    if (!currentFund) return;
+    const id = currentFund.f.id;
+    if (fundWatch.some((w) => w.id === id)) fundWatch = fundWatch.filter((w) => w.id !== id);
+    else fundWatch.push(fundEntry(currentFund));
+    saveFundWatch(); renderWatch(); updateFundWatchBtn();
+  });
+
+  function renderFundWatch() {
+    const box = $("chips");
+    box.innerHTML = "";
+    $("refreshAll").hidden = fundWatch.length === 0;
+    if (!fundWatch.length) {
+      box.innerHTML = '<span class="hint">看基金時按「加入自選」，下次一眼看完全部淨值</span>';
+      return;
+    }
+    fundWatch.forEach((w) => {
+      const chip = document.createElement("span");
+      chip.className = "chip fund-chip" + (currentFund && currentFund.f.id === w.id ? " active" : "");
+      chip.title = w.name + (w.date ? "（淨值日 " + w.date + "）" : "");
+      const cls = w.pct > 0 ? "up" : w.pct < 0 ? "down" : "";
+      chip.innerHTML = "<span>" + esc(shortName(w.name)) + "</span>" +
+        '<span class="s">' + fmtNav(w.nav) + "</span>" +
+        (w.pct != null ? '<span class="chg ' + cls + '">' + fmtPctS(w.pct) + "</span>" : "") +
+        '<button class="x" title="移除" type="button">×</button>';
+      chip.addEventListener("click", (e) => {
+        if (e.target.classList.contains("x")) {
+          fundWatch = fundWatch.filter((x) => x.id !== w.id);
+          saveFundWatch(); renderWatch(); updateFundWatchBtn();
+        } else {
+          input.value = w.name; openFund(w.id);
+        }
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  // 進入基金頁時更新一次自選基金的最新淨值（onlyOnce：同一次開啟只做一次）
+  let fundWatchRefreshed = false;
+  async function refreshFundWatch(onlyOnce) {
+    if (onlyOnce && fundWatchRefreshed) return;
+    fundWatchRefreshed = true;
+    if (!fundWatch.length) return;
+    const btn = $("refreshAll");
+    btn.disabled = true; btn.textContent = "更新中…";
+    try {
+      const idx = await Funds.loadIndex(!onlyOnce);
+      await Promise.all(fundWatch.map(async (w, i) => {
+        const f = idx.byId.get(w.id);
+        if (!f) return;
+        try { const h = await Funds.history(w.id); fundWatch[i] = fundEntry({ f, s: Funds.stats(h) }); } catch (e) { /* 單檔失敗不影響 */ }
+      }));
+      saveFundWatch();
+    } catch (e) { /* 清單讀不到就下次再試 */ }
+    btn.disabled = false; btn.textContent = "全部更新";
+    if (market === "fund") renderWatch();
+  }
 
   // ---------------- 工具 ----------------
   function show(which) {
-    ["empty", "loading", "error", "result", "fund"].forEach((k) => { $(k).hidden = k !== which; });
-    $("watch").hidden = which === "fund";
-    document.querySelector(".search-row").hidden = which === "fund";
+    ["empty", "loading", "error", "result", "fund", "fundResult"].forEach((k) => { $(k).hidden = k !== which; });
     document.body.classList.toggle("has-result", which === "result");
   }
   function fmt(v) {
@@ -463,12 +631,22 @@
       $("emptyText").innerHTML = t.text;
       paintQuick();
     }
+    if (m === "fund") input.placeholder = MARKET_TEXT.fund.ph;
+    $("watchLabel").textContent = m === "fund" ? "自選基金" : "自選股";
+    $("go").textContent = m === "fund" ? "查詢" : "診斷";
+    renderWatch();
     if (quiet) return;
     hideSuggest();
-    if (m === "fund") return show("fund");
     if (changed) { input.value = ""; }
+    if (m === "fund") {
+      if (currentFund) { show("fundResult"); history.replaceState(null, "", "#fund/" + currentFund.f.id); }
+      else { show("fund"); if (location.hash) history.replaceState(null, "", location.pathname); }
+      Funds.loadIndex().catch(() => { /* 搜尋時會再試 */ });
+      refreshFundWatch(true);
+      return;
+    }
     // 目前顯示的股票屬於這個市場就留著，否則回到起始畫面
-    if (current && (current.market === "US") === (m === "us")) show("result");
+    if (current && (current.market === "US") === (m === "us")) { show("result"); history.replaceState(null, "", "#" + current.stock.id); }
     else { show("empty"); if (location.hash) history.replaceState(null, "", location.pathname); }
     if (m === "us") FinMind.loadUSList().catch(() => { /* 搜尋時會再試 */ });
   }
@@ -477,14 +655,24 @@
 
   // ---------------- 啟動 ----------------
   FinMind.loadStockList().catch(() => { /* 搜尋時會再試 */ });
+  $("fundQuick").innerHTML = FUND_QUICK.map(([id, name]) =>
+    '<button class="ghost" type="button" data-id="' + id + '">' + name + "</button>").join("");
+  $("fundQuick").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    input.value = b.textContent; openFund(b.dataset.id);
+  }));
   setMarket(market, true);
-  if (market === "fund") show("fund");
+  if (market === "fund") { show("fund"); Funds.loadIndex().catch(() => {}); refreshFundWatch(true); }
   else if (market === "us") FinMind.loadUSList().catch(() => { /* 搜尋時會再試 */ });
   renderWatch();
   // 自選股裡用舊算法算的分數，開啟後自動在背景重算（不必一檔一檔點）
   setTimeout(() => refreshWatch(true), 1500);
   function fromHash() {
     const id = decodeURIComponent(location.hash.slice(1)).trim();
+    if (/^fund\//.test(id)) {
+      const fid = id.slice(5);
+      if (!currentFund || currentFund.f.id !== fid) { setMarket("fund", true); openFund(fid); }
+      return;
+    }
     if (id && (!current || current.stock.id !== id)) { input.value = id; diagnose(id); }
   }
   window.addEventListener("hashchange", fromHash);

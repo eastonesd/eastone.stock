@@ -471,3 +471,45 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   border-radius: 999px; padding: 3px 14px; }
 .fund-soon h1 { margin-top: 14px; }
 .fund-soon .small { margin-top: 12px; font-size: 13px; color: var(--faint); }
+
+/* ---------- 基金頁 ---------- */
+.fund-empty .small { margin-top: 18px; font-size: 12.5px; color: var(--faint); line-height: 1.7; }
+.suggest li.fund b { font-size: 12px; white-space: nowrap; color: var(--gold); }
+#fundResult { display: grid; gap: 14px; margin-top: 14px; grid-template-columns: minmax(0, 1fr); }
+#fundResult[hidden] { display: none !important; }
+.fund-hero { display: flex; flex-direction: column; gap: 8px; }
+.fund-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.fund-tags .etf-tag { align-self: auto; }
+.fund-hero h2 { font-size: 24px; font-weight: 900; margin: 2px 0 0; color: var(--navy); line-height: 1.3; }
+.fund-hero h2.long { font-size: 20px; }
+.fund-co { margin: 0; font-size: 13px; color: var(--muted); }
+.fund-hero .price #fNav { font-size: 28px; font-weight: 800; white-space: nowrap; }
+.fund-hero .price #fNav .cur { font-size: .5em; font-weight: 700; color: var(--muted); margin-right: 5px; }
+.fund-hero .meta { margin: 0; }
+.fund-hero .hero-actions { margin-top: auto; padding-top: 6px; }
+.ret-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.ret { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: grid; gap: 2px; }
+.ret small { font-size: 12px; color: var(--muted); }
+.ret b { font-size: 20px; font-weight: 800; white-space: nowrap; }
+.ret.up b { color: var(--red); } .ret.down b { color: var(--green); }
+.ret.na b { font-size: 14px; font-weight: 700; color: var(--faint); }
+.card-head small { font-size: 12px; color: var(--faint); }
+.fund-lamp { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--seg); }
+.fl-head { display: flex; justify-content: space-between; align-items: baseline; }
+.fl-head b { color: var(--navy); } .fl-head span { font-size: 12.5px; color: var(--gold); font-weight: 700; }
+.fl-bar { height: 6px; border-radius: 99px; background: var(--line); margin: 8px 0; overflow: hidden; }
+.fl-bar i { display: block; height: 100%; background: var(--gold); border-radius: 99px; }
+.fund-lamp p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.fund-chart-note { margin: 6px 0 0; font-size: 12px; color: var(--faint); }
+.fund-chip .chg { font-size: 12.5px; font-weight: 700; }
+@media (min-width: 900px) {
+  #fundResult { grid-template-columns: 380px minmax(0, 1fr); }
+  .fund-chart-card { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .ret-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.fund-hero, .fund-stats { padding: 20px 22px 18px; }
+.fund-hero.card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, #1B2A4A, var(--gold)); }
+@media (max-width: 520px) { .fund-hero, .fund-stats { padding: 16px; } }

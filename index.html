@@ -75,7 +75,7 @@
 
     <section class="watch" id="watch">
       <div class="watch-head">
-        <span>自選股</span>
+        <span id="watchLabel">自選股</span>
         <button id="refreshAll" class="ghost" type="button" hidden>全部更新</button>
       </div>
       <div class="chips" id="chips"></div>
@@ -90,11 +90,38 @@
       <div class="quick" id="quick"></div>
     </section>
 
-    <section id="fund" class="empty fund-soon" hidden>
-      <div class="fund-badge">籌備中</div>
-      <h1>基金淨值</h1>
-      <p>投資型保單連結的境內、境外基金，淨值每天自動更新，<br>一樣用走勢、報酬率與波動來看燈號。</p>
-      <p class="small">目前正在確認穩定的官方資料來源，接好後就會在這裡上線。</p>
+    <section id="fund" class="empty fund-empty" hidden>
+      <div class="lamp-house big demo" aria-hidden="true">
+        <i class="lamp red"></i><i class="lamp yellow"></i><i class="lamp green"></i>
+      </div>
+      <h1>基金淨值，一眼看完</h1>
+      <p>境內 4 千多檔、境外 5 千多檔基金，淨值每天自動更新。<br>投資型保單連結的標的，打名稱、投信或 ISIN 就找得到。</p>
+      <div class="quick" id="fundQuick"></div>
+      <p class="small">資料來源：投信投顧公會（境內）、集保結算所（境外）政府開放資料。<br>來源只提供最近幾天的淨值，歷史走勢自 2026-11-18 起每天累積。</p>
+    </section>
+
+    <section id="fundResult" hidden>
+      <div class="card fund-hero">
+        <div class="fund-tags"><span class="etf-tag" id="fKind"></span><span class="etf-tag f-other" id="fCur"></span></div>
+        <h2 id="fName"></h2>
+        <p class="fund-co" id="fCo"></p>
+        <div class="price"><span id="fNav"></span><span id="fChg" class="chg"></span></div>
+        <p class="meta" id="fMeta"></p>
+        <div class="hero-actions">
+          <button id="fWatchBtn" class="ghost" type="button">☆ 加入自選</button>
+          <button id="fRefreshBtn" class="ghost" type="button">重新抓取</button>
+        </div>
+      </div>
+      <div class="card fund-stats">
+        <div class="card-head"><h3>報酬率</h3><small>以淨值計算，未含配息</small></div>
+        <div class="ret-grid" id="fRets"></div>
+        <div class="fund-lamp" id="fLamp"></div>
+      </div>
+      <div class="card chart-card fund-chart-card">
+        <div class="card-head"><h3>淨值走勢</h3><div class="legend" id="fLegend"></div></div>
+        <div class="chart" id="fChart"></div>
+        <p class="fund-chart-note" id="fChartNote"></p>
+      </div>
     </section>
 
     <section id="loading" class="loading" hidden>
@@ -153,6 +180,7 @@
 
   <script src="assets/scoring.js"></script>
   <script src="assets/finmind.js"></script>
+  <script src="assets/funds.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
