@@ -9,9 +9,10 @@
   * 每次查詢間隔 2 秒，一檔基金約 1～4 次查詢，跟一般人手動查詢差不多
   * 補過的會記在 data/funds/backfill_done.json，不會重複查
 
-backfill.txt 格式：一行一檔基金 ID（東石診股網址 #fund/ 後面那段），# 後面可寫備註
-  F-AGIF-FVM   # 安聯收益成長 AM 美元
-  T-18480065   # 安聯台灣科技
+backfill.txt 格式：一行一檔基金 ID（東石診股網址 #fund/ 後面那段），後面可加年數（沒寫就是 2 年），# 後面可寫備註
+  F-AGIF-FVM       # 安聯收益成長 AM 美元（補 2 年）
+  F-GLIACU     5   # 摩根多重收益 A股穩定月配（補 5 年）
+年數比上次補的多，就會再補一次。
 """
 import http.cookiejar, json, os, re, sys, time, urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -22,7 +23,7 @@ NAV_DIR = os.path.join(FUNDS, "nav")
 LIST = os.path.join(FUNDS, "backfill.txt")
 DONE = os.path.join(FUNDS, "backfill_done.json")
 SITE = "https://www.fundclear.com.tw"
-YEARS = 2
+YEARS = 2          # 沒寫年數時的預設值
 PAUSE = 2.0
 TW = timezone(timedelta(hours=8))
 
@@ -57,6 +58,15 @@ def norm(s):
     return re.sub(r"[\s　]+", " ", str(s or "")).strip().upper()
 
 
+def key(s):
+    """比對機構名稱用：去掉空白、標點與重音符號（S.À R.L. 和 S.A.R.L. 視為相同）"""
+    import unicodedata
+    s = str(s or "")
+    if not re.search(r"[一-鿿]", s):
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^0-9A-Za-z一-鿿]", "", s).upper()
+
+
 def load_index():
     with open(os.path.join(FUNDS, "index.json"), encoding="utf-8") as f:
         d = json.load(f)
@@ -73,17 +83,28 @@ def offshore_codes(f):
     global _orgs
     if _orgs is None:
         _orgs = post("/api/offshore/common-select/org-selection", {"all": False}) or []
-    issuer = norm(f.get("issuer"))
-    org = next((o["value"] for o in _orgs if norm(o["name"]) == issuer), None)
+    # 集保開放資料的機構名稱常是「中文/英文」並列，觀測站選單只有其中一種寫法，所以拆開逐一比對
+    parts = [key(p) for p in re.split(r"[/／]", f.get("issuer") or "") if key(p)]
+    org = None
+    for o in _orgs:
+        k = key(o["name"])
+        if k and any(p == k for p in parts):
+            org = o["value"]; break
     if not org:
-        org = next((o["value"] for o in _orgs if issuer and (issuer in norm(o["name"]) or norm(o["name"]) in issuer)), None)
+        for o in _orgs:
+            k = key(o["name"])
+            if k and any(len(p) > 5 and (p in k or k in p) for p in parts):
+                org = o["value"]; break
     if not org:
+        print(f"  （找不到機構代碼：{f.get('issuer')}）")
         return None
     if org not in _names:
         _names[org] = post("/api/offshore/common-select/fund-name-selection", {"organizeCode": org, "all": False}) or []
     class_code = f["id"][2:]
     # 級別名稱通常以基金名稱開頭（「安聯收益成長基金-AM穩定月收類股(美元)」），名稱最長、相符的先試
-    cands = sorted([n for n in _names[org] if f["name"].startswith(n["name"].strip())], key=lambda n: -len(n["name"]))
+    # 比對時忽略空白與標點（「摩根投資基金 - 多重收益基金 - …」對「摩根投資基金-多重收益基金」）
+    cname = key(f["name"])
+    cands = sorted([n for n in _names[org] if key(n["name"]) and cname.startswith(key(n["name"]))], key=lambda n: -len(n["name"]))
     cands += [n for n in _names[org] if n not in cands]
     for n in cands[:6]:
         cls = post("/api/offshore/common-select/fund-class-selection",
@@ -121,22 +142,27 @@ def history(f, start, end):
 def main():
     if not os.path.exists(LIST):
         sys.exit("沒有 backfill.txt")
-    ids = []
+    want = {}
     with open(LIST, encoding="utf-8") as f:
         for line in f:
-            fid = line.split("#", 1)[0].strip()
-            if fid and fid not in ids:
-                ids.append(fid)
+            parts = line.split("#", 1)[0].split()
+            if not parts:
+                continue
+            years = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else YEARS
+            want[parts[0]] = max(years, want.get(parts[0], 0))
+    ids = list(want)
     done = json.load(open(DONE, encoding="utf-8")) if os.path.exists(DONE) else {}
-    todo = [i for i in ids if i not in done or "--force" in sys.argv]
+    # 沒補過、上次失敗、或這次要補的年數比上次多，才查
+    todo = [i for i in ids if "--force" in sys.argv or i not in done or not done[i].get("ok")
+            or want[i] > done[i].get("years", 2)]
     print(f"清單 {len(ids)} 檔，這次要補 {len(todo)} 檔")
     if not todo:
         return
     index = load_index()
     opener.open(urllib.request.Request(SITE + "/", headers={"User-Agent": HEAD["User-Agent"]}), timeout=60).read()  # 先拿 cookie
     end = date.today()
-    start = end.replace(year=end.year - YEARS)
     for fid in todo:
+        start = end.replace(year=end.year - want[fid])
         f = index.get(fid)
         if not f:
             print(f"！{fid}：基金清單裡沒有這個 ID")
@@ -162,9 +188,9 @@ def main():
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write("date,nav\n" + "".join(f"{d},{merged[d]}\n" for d in sorted(merged)))
         days = sorted(hist)
-        done[fid] = {"ok": True, "from": days[0], "to": days[-1], "n": len(hist),
+        done[fid] = {"ok": True, "years": want[fid], "from": days[0], "to": days[-1], "n": len(hist),
                      "at": datetime.now(TW).strftime("%Y-%m-%d %H:%M")}
-        print(f"✓ {fid} {f['name']}：{days[0]} ～ {days[-1]}，{len(hist)} 筆（新增 {added}）")
+        print(f"✓ {fid} {f['name']}（{want[fid]} 年）：{days[0]} ～ {days[-1]}，{len(hist)} 筆（新增 {added}）")
     with open(DONE, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(done, fh, ensure_ascii=False, indent=1, sort_keys=True)
     print(f"共查詢觀測站 {calls} 次")

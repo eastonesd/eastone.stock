@@ -82,7 +82,7 @@
     return {
       nav: last ? last[1] : null, date: last ? last[0] : null,
       change: prev ? last[1] - prev[1] : null, change_pct: prev ? last[1] / prev[1] - 1 : null,
-      periods: [["1 週", 7], ["1 個月", 30], ["3 個月", 91], ["6 個月", 182], ["1 年", 365]]
+      periods: [["1 週", 7], ["1 個月", 30], ["3 個月", 91], ["6 個月", 182], ["1 年", 365], ["3 年", 1095], ["5 年", 1826]]
         .map(([label, d]) => ({ label, days: d, value: periodReturn(h, d) })),
       vol, count: n, since: n ? h[0][0] : null, span,
     };

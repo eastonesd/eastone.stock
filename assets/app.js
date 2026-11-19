@@ -328,10 +328,15 @@
     }
     let lastMonth = "", monthCount = 0;
     const every = W < 600 ? 2 : 1;   // 手機上隔月標示
+    // 期間超過兩年半（例如基金五年走勢）就只標年份，不然月份會擠成一團
+    const spanD = c.dates.length > 1 ? (Date.parse(c.dates[c.dates.length - 1]) - Date.parse(c.dates[0])) / 864e5 : 0;
+    const yearsOnly = spanD > 900;                       // 兩年半以上：只標年份
+    const quarterly = !yearsOnly && spanD > 450;         // 一年多到兩年半：每季標一次（年份、4月、7月、10月）
     c.dates.forEach((d, i) => {
       const m = d.slice(0, 7);
       if (m !== lastMonth) {
-        if (lastMonth && i < n - 8 && (monthCount++ % every === 0)) {
+        const show = yearsOnly ? m.endsWith("-01") : quarterly ? /-(01|04|07|10)$/.test(m) : (monthCount++ % every === 0);
+        if (lastMonth && i < n - 8 && show) {
           svg += '<text class="axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' +
             (m.endsWith("-01") ? m.slice(0, 4) : +m.slice(5) + "月") + "</text>";
         }
@@ -438,9 +443,9 @@
     $("fRets").innerHTML = s.periods.map((p) => {
       const v = p.value;
       const cls = v == null ? "na" : v > 0 ? "up" : v < 0 ? "down" : "";
-      return '<div class="ret ' + cls + '"><small>' + p.label + "</small><b>" + (v == null ? "累積中" : fmtPctS(v)) + "</b></div>";
+      return '<div class="ret ' + cls + '"><small>' + p.label + "</small><b>" + (v == null ? "資料不足" : fmtPctS(v)) + "</b></div>";
     }).join("") + '<div class="ret ' + (s.vol == null ? "na" : "") + '"><small>年化波動度</small><b>' +
-      (s.vol == null ? "累積中" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
+      (s.vol == null ? "資料不足" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
 
     const pct = Math.min(100, Math.round((s.span / 365) * 100));
     const enough = s.span >= 365;
@@ -455,18 +460,35 @@
   }
 
   const FUND_SERIES = [["close", "淨值", "--c-close", 2], ["MA20", "20日均", "--c-ma20", 1.4]];
+  // 走勢圖期間：1 年／3 年／5 年，只列出資料夠長的選項；記住上次選擇
+  const FUND_RANGES = [["1 年", 365], ["3 年", 1095], ["5 年", 1826]];
+  let fundRange = (() => { try { return +localStorage.getItem("eastone.fundRange.v1") || 1826; } catch (e) { return 1826; } })();
   function renderFundChart(cf) {
     const h = cf.h, n = h.length;
     const navs = h.map((p) => p[1]);
     const ma = navs.map((_, i) => (i >= 19 ? navs.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20 : null));
-    const from = Math.max(0, n - 250);
+    const spanDays = n > 1 ? (Date.parse(h[n - 1][0]) - Date.parse(h[0][0])) / 864e5 : 0;
+    // 只顯示「資料比上一檔期間長」的按鈕，例如只有 2 年資料就顯示 1 年、3 年（＝全部）
+    const opts = FUND_RANGES.filter(([, d], i) => i === 0 || spanDays > FUND_RANGES[i - 1][1] + 20);
+    const days = opts.some(([, d]) => d === fundRange) ? fundRange : opts[opts.length - 1][1];
+    $("fRange").innerHTML = opts.length > 1 ? opts.map(([label, d]) =>
+      '<button type="button" class="' + (d === days ? "on" : "") + '" data-d="' + d + '">' +
+      (d >= spanDays - 20 && d === opts[opts.length - 1][1] && spanDays < d - 20 ? "全部" : label) + "</button>").join("") : "";
+    $("fRange").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      fundRange = +b.dataset.d;
+      try { localStorage.setItem("eastone.fundRange.v1", fundRange); } catch (e) { /* ignore */ }
+      renderFundChart(cf);
+    }));
+    const cut = Date.parse(h[n - 1][0]) - days * 864e5;
+    let from = 0;
+    while (from < n - 1 && Date.parse(h[from][0]) < cut) from++;
     const c = { dates: h.slice(from).map((p) => p[0]), close: navs.slice(from), MA20: ma.slice(from) };
     const series = n >= 20 ? FUND_SERIES : FUND_SERIES.slice(0, 1);
     if (n >= 2) renderChart(c, { box: "fChart", legend: "fLegend", series, fit: false });
     else { $("fChart").innerHTML = ""; $("fLegend").innerHTML = ""; }
     $("fChartNote").textContent = n < 20
       ? "目前有 " + n + " 筆淨值（" + h[0][0] + " ～ " + h[n - 1][0] + "），走勢圖會隨每天收集慢慢變完整。"
-      : "近 " + Math.min(n, 250) + " 筆淨值（" + c.dates[0] + " ～ " + c.dates[c.dates.length - 1] + "）";
+      : c.dates.length + " 筆淨值（" + c.dates[0] + " ～ " + c.dates[c.dates.length - 1] + "）";
   }
 
   // ---- 自選基金（和股票分開存）----

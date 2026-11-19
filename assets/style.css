@@ -513,3 +513,11 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .fund-hero.card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; border-radius: var(--radius) var(--radius) 0 0;
   background: linear-gradient(90deg, #1B2A4A, var(--gold)); }
 @media (max-width: 520px) { .fund-hero, .fund-stats { padding: 16px; } }
+
+/* 基金：報酬 4 欄、走勢期間切換 */
+@media (min-width: 900px) { .ret-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.fund-range { display: flex; gap: 4px; }
+.fund-range button { border: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 12.5px; font-weight: 700;
+  padding: 4px 12px; border-radius: 999px; }
+.fund-range button.on { background: var(--navy); border-color: var(--navy); color: var(--card); }
+.fund-chart-card .legend { margin-left: auto; }
