@@ -424,11 +424,15 @@
     const { f, s } = cf;
     show("fundResult");
     const kind = $("fKind");
-    kind.textContent = f.kind + "基金"; kind.className = "etf-tag " + (f.kind === "境外" ? "f-bond" : "");
+    const acct = f.kind === "類全委";          // 保險公司類全委帳戶：用「撥回」不用「配息」
+    const term = acct ? "撥回" : "配息";
+    kind.textContent = acct ? "類全委帳戶" : f.kind + "基金";
+    kind.className = "etf-tag " + (f.kind === "境外" ? "f-bond" : acct ? "f-acct" : "");
     $("fCur").textContent = curName(f.currency) + (f.currency && CUR_NAME[f.currency] ? " " + f.currency : "");
     $("fName").textContent = f.name;
     $("fName").classList.toggle("long", f.name.length > 18);
-    $("fCo").textContent = [f.company, f.isin && "ISIN " + f.isin, f.ticker && "代號 " + f.ticker].filter(Boolean).join(" · ");
+    $("fCo").textContent = [f.company, f.isin && "ISIN " + f.isin, f.ticker && (acct ? "帳戶代碼 " : "代號 ") + f.ticker,
+      acct && "資料來源：" + f.org + "官網"].filter(Boolean).join(" · ");
     $("fNav").innerHTML = '<small class="cur">' + esc(f.currency) + "</small>" + fmtNav(s.nav);
     const chg = $("fChg");
     if (s.change != null) {
@@ -442,13 +446,13 @@
 
     // 有配息紀錄：大字是含息報酬（配息再投入），小字是只看淨值的報酬
     const hasDiv = !!s.tr;
-    $("fRetsNote").textContent = hasDiv ? "大字＝含息報酬（配息再投入），小字＝淨值報酬" : "以淨值計算（未收到配息紀錄）";
+    $("fRetsNote").textContent = hasDiv ? "大字＝含" + term + "報酬（" + term + "再投入），小字＝淨值報酬" : "以淨值計算（未收到" + term + "紀錄）";
     $("fRets").innerHTML = s.periods.map((p) => {
       const v = hasDiv ? p.total : p.value;
       const cls = v == null ? "na" : v > 0 ? "up" : v < 0 ? "down" : "";
       const sub = hasDiv && p.value != null
         ? '<em class="' + (p.value > 0 ? "up" : p.value < 0 ? "down" : "") + '">淨值 ' + fmtPctS(p.value) + "</em>" : "";
-      return '<div class="ret ' + cls + '"><small>' + p.label + (hasDiv && v != null ? " 含息" : "") + "</small><b>" +
+      return '<div class="ret ' + cls + '"><small>' + p.label + (hasDiv && v != null ? (acct ? " 含撥回" : " 含息") : "") + "</small><b>" +
         (v == null ? "資料不足" : fmtPctS(v)) + "</b>" + sub + "</div>";
     }).join("") + '<div class="ret ' + (s.vol == null ? "na" : "") + '"><small>年化波動度</small><b>' +
       (s.vol == null ? "資料不足" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
@@ -458,13 +462,15 @@
     $("fDiv").hidden = !dv;
     if (dv) {
       const gap = dv.since > firstNav && (Date.parse(dv.since) - Date.parse(firstNav)) / 864e5 > 45;
-      $("fDiv").innerHTML = '<div class="fd-head"><b>配息</b><span>' + dv.freq + "</span></div>" +
+      const freq = acct && dv.count > 12 ? "每月" + (dv.count >= 20 ? "多次" : "") : dv.freq;
+      $("fDiv").innerHTML = '<div class="fd-head"><b>' + (acct ? "資產撥回" : "配息") + "</b><span>" + freq + "</span></div>" +
         '<div class="fd-grid">' +
-        "<div><small>近一年配息</small><b>" + dv.count + " 次 · " + esc(f.currency) + " " + fmtNav(dv.sum) + "</b></div>" +
-        "<div><small>年化配息率</small><b>" + (dv.count ? (dv.yield * 100).toFixed(1) + "%" : "–") + "</b></div>" +
+        "<div><small>近一年" + term + "</small><b>" + dv.count + " 次 · " + esc(f.currency) + " " + fmtNav(dv.sum) + "</b></div>" +
+        "<div><small>年化" + term + "率</small><b>" + (dv.count ? (dv.yield * 100).toFixed(1) + "%" : "–") + "</b></div>" +
         "<div><small>最近一次</small><b>" + dv.last[0] + " · " + fmtNav(dv.last[1]) + "</b></div></div>" +
-        "<p>年化配息率＝近一年配息合計 ÷ 最新淨值；配息可能來自本金，配息率高不等於賺得多，請搭配含息報酬一起看。" +
-        (gap ? "已收錄的配息紀錄自 " + dv.since + " 起，在那之前的含息報酬可能略為低估。" : "") + "</p>";
+        "<p>年化" + term + "率＝近一年" + term + "合計 ÷ 最新淨值；" + term + "可能來自本金，" + term + "率高不等於賺得多，請搭配含" +
+        (acct ? "撥回" : "息") + "報酬一起看。" +
+        (gap ? "已收錄的" + term + "紀錄自 " + dv.since + " 起，在那之前的含" + (acct ? "撥回" : "息") + "報酬可能略為低估。" : "") + "</p>";
     }
 
     const pct = Math.min(100, Math.round((s.span / 365) * 100));

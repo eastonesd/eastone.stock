@@ -8,6 +8,9 @@
 兩個來源都只提供最近幾天的淨值、沒有歷史，所以由 GitHub Actions 每天跑這支程式，
 把新的淨值「累積」進 data/funds/nav/<基金ID>.csv，歷史就從開始收集的那天一天天長出來。
 
+保險公司類全委帳戶（不是公開基金，淨值只在保險公司官網公布）：
+  清單在 tools/insurer_accounts.json，每次整段重抓淨值與資產撥回紀錄
+
 配息（算含息報酬用，同樣每天累積）：
   境外：集保「境外基金配息資訊」（OpenAPI 3-5，最近約半年）
   境內：投信投顧公會「境內基金配息資料」 https://data.gov.tw/dataset/160547
@@ -102,6 +105,55 @@ def offshore():
     return rows
 
 
+INSURER_LIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "insurer_accounts.json")
+
+
+def roc_or_ad(d):
+    """115/11/09（民國）或 2026/11/09 都轉成 2026-11-09"""
+    p = re.split(r"[/\-.]", str(d).strip())
+    if len(p) != 3 or not all(x.isdigit() for x in p):
+        return None
+    y = int(p[0]) + (1911 if int(p[0]) < 1000 else 0)
+    return f"{y:04d}-{int(p[1]):02d}-{int(p[2]):02d}"
+
+
+def insurer_accounts():
+    """回傳 (淨值 rows, 撥回 [(id, 除息日, 金額)])；嘉實資訊（MoneyDJ）架的保險公司投資標的網站"""
+    if not os.path.exists(INSURER_LIST):
+        return [], []
+    accts = json.load(open(INSURER_LIST, encoding="utf-8"))
+    rows, divs = [], []
+    today = datetime.now(TW).strftime("%Y/%m/%d")
+    for a in accts:
+        base = a["site"].rstrip("/")
+        # 淨值：第一段是日期、第二段是淨值，各以逗號分隔
+        raw = fetch(f"{base}/w/bcd/taBCDNavList.djbcd?a={a['dj']}&b={a['code']}&c=0&d={a.get('since', '')}&e={today}")
+        text = raw.decode("big5", errors="replace").strip()
+        parts = [p for p in re.split(r"\s+", text) if p]
+        if len(parts) < 2:
+            raise RuntimeError(f"{a['name']}：淨值格式看不懂")
+        dates, navs = parts[0].split(","), parts[1].split(",")
+        n = 0
+        for d, v in zip(dates, navs):
+            d, v = iso(d), num(v)
+            if d and v:
+                n += 1
+                rows.append({"id": a["id"], "name": a["name"], "company": f"{a['insurer']}（委託{a['manager']}）",
+                             "currency": a["currency"], "kind": "類全委", "isin": "", "type": "", "ticker": a["code"],
+                             "org": a["insurer"], "issuer": a["manager"], "date": d, "nav": v})
+        # 資產撥回：表格「日期 | 狀態 | 配息金額 | 幣別」，日期是民國年
+        page = fetch(f"{base}/w/wta/ta105.djhtm?a={a['dj']}&b={a['code']}").decode("big5", errors="replace")
+        k = 0
+        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", page, flags=re.S | re.I):
+            cells = [re.sub(r"<[^>]+>|&nbsp;", " ", c).strip() for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, flags=re.S | re.I)]
+            if len(cells) >= 3:
+                d, amt = roc_or_ad(cells[0]), num(cells[2])
+                if d and amt:
+                    divs.append((a["id"], d, amt)); k += 1
+        print(f"類全委 {a['insurer']} {a['code']}：淨值 {n} 筆、撥回 {k} 筆")
+    return rows, divs
+
+
 def onshore_div():
     raw = fetch(SITCA_DIV_URL)
     try:
@@ -146,8 +198,10 @@ def merge_div(fid, items):
     return len(cur) - len(before)
 
 
-def collect_dividends(errors):
+def collect_dividends(errors, extra=()):
     by = {}
+    for fid, d, amt in extra:
+        by.setdefault(fid, []).append((d, amt))
     for name, fn in (("境內配息（投信投顧公會）", onshore_div), ("境外配息（集保）", offshore_div)):
         try:
             got = fn()
@@ -174,7 +228,14 @@ def main():
             print(f"！{name} 失敗：{e}", file=sys.stderr)
     if not rows:
         sys.exit("兩個來源都失敗，這次不更新")
-    collect_dividends(errors)
+    ins_divs = []
+    try:
+        ins_rows, ins_divs = insurer_accounts()
+        rows += ins_rows
+    except Exception as e:      # 保險公司網站抓不到不影響其他基金
+        errors.append(f"類全委帳戶：{e}")
+        print(f"！類全委帳戶 失敗：{e}", file=sys.stderr)
+    collect_dividends(errors, ins_divs)
 
     # 依基金分組，寫入（累積）各自的淨值歷史
     by_id = {}

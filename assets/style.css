@@ -533,3 +533,6 @@ body { padding-bottom: env(safe-area-inset-bottom); }
 .fd-grid b { font-size: 15px; font-weight: 800; }
 .fund-div p { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
 @media (max-width: 520px) { .fd-grid { grid-template-columns: 1fr 1fr; } .fd-grid div:last-child { grid-column: 1 / -1; } }
+.etf-tag.f-acct { color: #8A5A00; border-color: #C9962B; background: color-mix(in srgb, #E9C46A 18%, var(--card)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .etf-tag.f-acct { color: #E9C46A; } }
+:root[data-theme="dark"] .etf-tag.f-acct { color: #E9C46A; }
