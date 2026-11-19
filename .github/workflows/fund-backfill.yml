@@ -20,19 +20,24 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 先更新基金清單（取得查詢需要的機構代碼）
-        run: python tools/fund_nav.py
-      - name: 回補歷史淨值
-        run: python tools/fund_backfill.py
-      - name: 存回儲存庫
+      - name: 回補歷史淨值與配息，存回儲存庫
+        # 先更新基金清單（取得查詢需要的機構代碼）再回補；存檔撞到別的排程就從最新版本重做
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/funds
-          if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
-          git commit -q -m "基金歷史淨值回補 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
-          for i in 1 2 3; do git pull -q --rebase origin main && git push -q && exit 0; sleep 5; done
+          for i in 1 2 3; do
+            git fetch -q origin main && git reset -q --hard origin/main
+            python tools/fund_nav.py
+            python tools/fund_backfill.py
+            git add data/funds
+            if git diff --cached --quiet; then echo "沒有變動"; exit 0; fi
+            git commit -q -m "基金歷史淨值回補 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+            git push -q origin HEAD:main && exit 0
+            echo "推送衝突，重來一次"; sleep 10
+          done
           exit 1

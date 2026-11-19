@@ -25,17 +25,23 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 抓取並累積淨值
-        run: python tools/fund_nav.py
-      - name: 存回儲存庫
+      - name: 抓取、累積淨值與配息，存回儲存庫
+        # 每次都從最新的 main 開始；存檔時若別的排程剛好也更新了，就重新抓一次再存（程式重跑不會重複寫入）
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/funds
-          if git diff --cached --quiet; then echo "沒有新淨值"; exit 0; fi
-          git commit -q -m "基金淨值更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
-          for i in 1 2 3; do git pull -q --rebase origin main && git push -q && exit 0; sleep 5; done
+          for i in 1 2 3; do
+            git fetch -q origin main && git reset -q --hard origin/main
+            python tools/fund_nav.py
+            git add data/funds
+            if git diff --cached --quiet; then echo "沒有新資料"; exit 0; fi
+            git commit -q -m "基金淨值更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+            git push -q origin HEAD:main && exit 0
+            echo "推送衝突，重來一次"; sleep 10
+          done
           exit 1
