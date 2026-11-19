@@ -20,7 +20,7 @@
         const funds = d.funds.map((x) => ({
           id: x[col.id], name: x[col.name], company: x[col.company], currency: x[col.currency] || "",
           kind: x[col.kind], isin: x[col.isin] || "", type: x[col.type] || "", date: x[col.date], nav: x[col.nav],
-          ticker: x[col.ticker] || "",
+          ticker: x[col.ticker] || "", org: (col.org != null && x[col.org]) || "", issuer: (col.issuer != null && x[col.issuer]) || "",
         }));
         const byId = new Map(funds.map((f) => [f.id, f]));
         return { updated: d.updated, funds, byId };
