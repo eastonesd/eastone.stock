@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: [".github/workflows/fund-nav.yml", "tools/fund_nav.py"]
+    paths: [".github/workflows/fund-nav.yml", "tools/fund_nav.py", "tools/insurer_accounts.json"]
 
 permissions:
   contents: write
