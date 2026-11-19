@@ -58,18 +58,58 @@
     }).filter(([d, v]) => d && isFinite(v) && v > 0);
   }
 
-  const DAY = 86400000;
-  // 期間報酬：找「期初那天或之前」最近一筆淨值；資料還沒累積到那麼久就回傳 null
-  function periodReturn(h, days) {
-    if (h.length < 2) return null;
-    const lastT = Date.parse(h[h.length - 1][0]), target = lastT - days * DAY;
-    if (Date.parse(h[0][0]) > target + 3 * DAY) return null;      // 容許 3 天（遇到假日）
-    let base = h[0];
-    for (const p of h) { if (Date.parse(p[0]) <= target) base = p; else break; }
-    return h[h.length - 1][1] / base[1] - 1;
+  // 配息紀錄：data/funds/div/<id>.csv（exdate,amount），沒有檔案代表沒收到配息（多半是累積型）
+  async function dividends(id) {
+    try {
+      const r = await fetch(BASE + "div/" + encodeURIComponent(id) + ".csv", { cache: "no-cache" });
+      if (!r.ok) return [];
+      return (await r.text()).trim().split("\n").slice(1).map((l) => {
+        const [d, v] = l.split(","); return [d, Number(v)];
+      }).filter(([d, v]) => d && isFinite(v) && v > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    } catch (e) { return []; }
   }
 
-  function stats(h) {
+  // 含息淨值：假設每次配息都在除息日用當天淨值再買回，持有單位數逐次增加；值＝淨值 × 累積單位數
+  function totalReturnIndex(h, divs) {
+    let units = 1, j = 0;
+    const out = [];
+    for (let i = 0; i < h.length; i++) {
+      const [d, nav] = h[i];
+      while (j < divs.length && divs[j][0] <= d) {
+        if (i > 0 || divs[j][0] === d) units *= 1 + divs[j][1] / nav;   // 淨值資料開始前的配息不算
+        j++;
+      }
+      out.push(nav * units);
+    }
+    return out;
+  }
+
+  const DAY = 86400000;
+  // 期間報酬：找「期初那天或之前」最近一筆；資料還沒累積到那麼久就回傳 null。vals 預設用淨值
+  function periodReturn(h, days, vals) {
+    if (h.length < 2) return null;
+    const v = vals || h.map((p) => p[1]);
+    const lastT = Date.parse(h[h.length - 1][0]), target = lastT - days * DAY;
+    if (Date.parse(h[0][0]) > target + 3 * DAY) return null;      // 容許 3 天（遇到假日）
+    let b = 0;
+    for (let i = 0; i < h.length; i++) { if (Date.parse(h[i][0]) <= target) b = i; else break; }
+    return v[v.length - 1] / v[b] - 1;
+  }
+
+  function divSummary(h, divs) {
+    if (!divs.length || !h.length) return null;
+    const lastT = Date.parse(h[h.length - 1][0]);
+    const year = divs.filter(([d]) => Date.parse(d) > lastT - 365 * DAY && Date.parse(d) <= lastT + 31 * DAY);
+    const n = year.length;
+    const freq = n >= 10 ? "每月" : n >= 3 ? "每季" : n === 2 ? "每半年" : n === 1 ? "每年" : "近一年未配息";
+    const sum = year.reduce((a, [, v]) => a + v, 0);
+    const last = divs[divs.length - 1];
+    return { count: n, freq, sum, yield: n ? sum / h[h.length - 1][1] : 0, last, since: divs[0][0], total: divs.length };
+  }
+
+  function stats(h, divs) {
+    divs = divs || [];
+    const tr = divs.length ? totalReturnIndex(h, divs) : null;
     const n = h.length, last = h[n - 1], prev = n > 1 ? h[n - 2] : null;
     const rets = [];
     for (let i = 1; i < n; i++) rets.push(h[i][1] / h[i - 1][1] - 1);
@@ -83,10 +123,11 @@
       nav: last ? last[1] : null, date: last ? last[0] : null,
       change: prev ? last[1] - prev[1] : null, change_pct: prev ? last[1] / prev[1] - 1 : null,
       periods: [["1 週", 7], ["1 個月", 30], ["3 個月", 91], ["6 個月", 182], ["1 年", 365], ["3 年", 1095], ["5 年", 1826]]
-        .map(([label, d]) => ({ label, days: d, value: periodReturn(h, d) })),
+        .map(([label, d]) => ({ label, days: d, value: periodReturn(h, d), total: tr ? periodReturn(h, d, tr) : null })),
       vol, count: n, since: n ? h[0][0] : null, span,
+      tr, div: divSummary(h, divs),
     };
   }
 
-  root.Funds = { loadIndex, search, history, stats };
+  root.Funds = { loadIndex, search, history, dividends, stats, totalReturnIndex };
 })(self);

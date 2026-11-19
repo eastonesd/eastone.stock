@@ -521,3 +521,15 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   padding: 4px 12px; border-radius: 999px; }
 .fund-range button.on { background: var(--navy); border-color: var(--navy); color: var(--card); }
 .fund-chart-card .legend { margin-left: auto; }
+
+/* 含息報酬與配息摘要 */
+.ret em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.ret em.up { color: var(--red); } .ret em.down { color: var(--green); }
+.fund-div { margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.fd-head { display: flex; justify-content: space-between; align-items: baseline; }
+.fd-head b { color: var(--navy); } .fd-head span { font-size: 12.5px; color: var(--gold); font-weight: 700; }
+.fd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 6px; }
+.fd-grid small { display: block; font-size: 12px; color: var(--muted); }
+.fd-grid b { font-size: 15px; font-weight: 800; }
+.fund-div p { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
+@media (max-width: 520px) { .fd-grid { grid-template-columns: 1fr 1fr; } .fd-grid div:last-child { grid-column: 1 / -1; } }

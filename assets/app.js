@@ -406,9 +406,9 @@
       const idx = await Funds.loadIndex(refresh);
       const f = idx.byId.get(id);
       if (!f) throw new Error("找不到這檔基金（" + id + "）：可能已清算、合併或改名");
-      const h = await Funds.history(id);
+      const [h, divs] = await Promise.all([Funds.history(id), Funds.dividends(id)]);
       if (!h.length) throw new Error("這檔基金還沒有淨值資料");
-      currentFund = { f, h, s: Funds.stats(h), updated: idx.updated };
+      currentFund = { f, h, divs, s: Funds.stats(h, divs), updated: idx.updated };
       renderFund(currentFund);
       upsertFundWatch(currentFund);
       renderWatch();
@@ -440,12 +440,32 @@
     $("fMeta").textContent = "淨值日 " + s.date + " · 已收集 " + s.count + " 筆淨值（自 " + s.since + " 起）" +
       (late && f.kind === "境外" ? " · 境外基金淨值由總代理申報，約晚 2–5 天公布" : "");
 
+    // 有配息紀錄：大字是含息報酬（配息再投入），小字是只看淨值的報酬
+    const hasDiv = !!s.tr;
+    $("fRetsNote").textContent = hasDiv ? "大字＝含息報酬（配息再投入），小字＝淨值報酬" : "以淨值計算（未收到配息紀錄）";
     $("fRets").innerHTML = s.periods.map((p) => {
-      const v = p.value;
+      const v = hasDiv ? p.total : p.value;
       const cls = v == null ? "na" : v > 0 ? "up" : v < 0 ? "down" : "";
-      return '<div class="ret ' + cls + '"><small>' + p.label + "</small><b>" + (v == null ? "資料不足" : fmtPctS(v)) + "</b></div>";
+      const sub = hasDiv && p.value != null
+        ? '<em class="' + (p.value > 0 ? "up" : p.value < 0 ? "down" : "") + '">淨值 ' + fmtPctS(p.value) + "</em>" : "";
+      return '<div class="ret ' + cls + '"><small>' + p.label + (hasDiv && v != null ? " 含息" : "") + "</small><b>" +
+        (v == null ? "資料不足" : fmtPctS(v)) + "</b>" + sub + "</div>";
     }).join("") + '<div class="ret ' + (s.vol == null ? "na" : "") + '"><small>年化波動度</small><b>' +
       (s.vol == null ? "資料不足" : (s.vol * 100).toFixed(1) + "%") + "</b></div>";
+
+    const dv = s.div;
+    const firstNav = cf.h[0][0];
+    $("fDiv").hidden = !dv;
+    if (dv) {
+      const gap = dv.since > firstNav && (Date.parse(dv.since) - Date.parse(firstNav)) / 864e5 > 45;
+      $("fDiv").innerHTML = '<div class="fd-head"><b>配息</b><span>' + dv.freq + "</span></div>" +
+        '<div class="fd-grid">' +
+        "<div><small>近一年配息</small><b>" + dv.count + " 次 · " + esc(f.currency) + " " + fmtNav(dv.sum) + "</b></div>" +
+        "<div><small>年化配息率</small><b>" + (dv.count ? (dv.yield * 100).toFixed(1) + "%" : "–") + "</b></div>" +
+        "<div><small>最近一次</small><b>" + dv.last[0] + " · " + fmtNav(dv.last[1]) + "</b></div></div>" +
+        "<p>年化配息率＝近一年配息合計 ÷ 最新淨值；配息可能來自本金，配息率高不等於賺得多，請搭配含息報酬一起看。" +
+        (gap ? "已收錄的配息紀錄自 " + dv.since + " 起，在那之前的含息報酬可能略為低估。" : "") + "</p>";
+    }
 
     const pct = Math.min(100, Math.round((s.span / 365) * 100));
     const enough = s.span >= 365;
@@ -460,6 +480,7 @@
   }
 
   const FUND_SERIES = [["close", "淨值", "--c-close", 2], ["MA20", "20日均", "--c-ma20", 1.4]];
+  const TR_SERIES = ["tr", "含息走勢", "--c-ma60", 1.8];
   // 走勢圖期間：1 年／3 年／5 年，只列出資料夠長的選項；記住上次選擇
   const FUND_RANGES = [["1 年", 365], ["3 年", 1095], ["5 年", 1826]];
   let fundRange = (() => { try { return +localStorage.getItem("eastone.fundRange.v1") || 1826; } catch (e) { return 1826; } })();
@@ -483,7 +504,13 @@
     let from = 0;
     while (from < n - 1 && Date.parse(h[from][0]) < cut) from++;
     const c = { dates: h.slice(from).map((p) => p[0]), close: navs.slice(from), MA20: ma.slice(from) };
-    const series = n >= 20 ? FUND_SERIES : FUND_SERIES.slice(0, 1);
+    let series = n >= 20 ? FUND_SERIES : FUND_SERIES.slice(0, 1);
+    // 含息走勢：從圖的起點跟淨值同一個位置出發，之後差距就是配息再投入累積出來的
+    if (cf.s.tr) {
+      const base = cf.s.tr[from], start = navs[from];
+      c.tr = cf.s.tr.slice(from).map((v) => (v / base) * start);
+      series = series.concat([TR_SERIES]);
+    }
     if (n >= 2) renderChart(c, { box: "fChart", legend: "fLegend", series, fit: false });
     else { $("fChart").innerHTML = ""; $("fLegend").innerHTML = ""; }
     $("fChartNote").textContent = n < 20

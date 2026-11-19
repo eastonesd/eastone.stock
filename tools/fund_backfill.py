@@ -13,6 +13,7 @@ backfill.txt 格式：一行一檔基金 ID（東石診股網址 #fund/ 後面�
   F-AGIF-FVM       # 安聯收益成長 AM 美元（補 2 年）
   F-GLIACU     5   # 摩根多重收益 A股穩定月配（補 5 年）
 年數比上次補的多，就會再補一次。
+境外基金會一併補上同期間的配息紀錄（data/funds/div/<id>.csv），用來算含息報酬。
 """
 import http.cookiejar, json, os, re, sys, time, urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -20,6 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 FUNDS = os.path.join(ROOT, "data", "funds")
 NAV_DIR = os.path.join(FUNDS, "nav")
+DIV_DIR = os.path.join(FUNDS, "div")
 LIST = os.path.join(FUNDS, "backfill.txt")
 DONE = os.path.join(FUNDS, "backfill_done.json")
 SITE = "https://www.fundclear.com.tw"
@@ -114,6 +116,49 @@ def offshore_codes(f):
     return None
 
 
+_codes = {}
+
+
+def offshore_dividends(f, start, end):
+    """境外基金的歷年配息（觀測站「配息資訊」），回傳 {除息日: 每單位配息}"""
+    codes = _codes.get(f["id"]) or offshore_codes(f)
+    if not codes:
+        return None
+    out, page = {}, 1
+    while True:
+        res = post("/api/offshore/fund-info/info-dividend/query", {
+            "_pageNum": page, "_pageSize": 100, "queryType": "2", "searchName": "", **codes, "frequency": [],
+            "baseBeginDate": start.strftime("%Y/%m"), "baseEndDate": end.strftime("%Y/%m")})
+        rows = (res or {}).get("list") or []
+        for r in rows:
+            d = re.sub(r"\D", "", str(r.get("asiEnterDate") or ""))      # asiEnterDate＝除息日
+            try:
+                amt = float(str(r.get("asiAmt", "")).replace(",", ""))
+            except ValueError:
+                continue
+            if len(d) == 8 and amt > 0:
+                out[f"{d[:4]}-{d[4:6]}-{d[6:]}"] = f"{amt:.6f}".rstrip("0").rstrip(".")
+        total = int((res or {}).get("total") or 0)
+        if not rows or page * 100 >= total:
+            return out
+        page += 1
+
+
+def save_div(fid, divs):
+    os.makedirs(DIV_DIR, exist_ok=True)
+    path = os.path.join(DIV_DIR, fid + ".csv")
+    cur = {}
+    if os.path.exists(path):
+        for line in open(path, encoding="utf-8").read().splitlines()[1:]:
+            d, _, v = line.partition(",")
+            if d and v:
+                cur[d] = v
+    merged = {**divs, **cur}
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("exdate,amount\n" + "".join(f"{d},{merged[d]}\n" for d in sorted(merged)))
+    return len(merged) - len(cur)
+
+
 def history(f, start, end):
     rng = {"startDate": start.strftime("%Y/%m/%d"), "endDate": end.strftime("%Y/%m/%d")}
     if f["kind"] == "境內":
@@ -124,6 +169,7 @@ def history(f, start, end):
         codes = offshore_codes(f)
         if not codes:
             return None, "觀測站找不到這檔境外基金的機構或級別代碼"
+        _codes[f["id"]] = codes
         res = post("/api/offshore/nav-profit/query-history", {**codes, **rng})
     if not res or not res.get("tableList"):
         return None, "觀測站查無歷史淨值"
@@ -153,8 +199,9 @@ def main():
     ids = list(want)
     done = json.load(open(DONE, encoding="utf-8")) if os.path.exists(DONE) else {}
     # 沒補過、上次失敗、或這次要補的年數比上次多，才查
+    # 境外基金另外要有配息紀錄（div），舊的回補紀錄沒有就補一次
     todo = [i for i in ids if "--force" in sys.argv or i not in done or not done[i].get("ok")
-            or want[i] > done[i].get("years", 2)]
+            or want[i] > done[i].get("years", 2) or (i.startswith("F-") and "div" not in done[i])]
     print(f"清單 {len(ids)} 檔，這次要補 {len(todo)} 檔")
     if not todo:
         return
@@ -191,6 +238,17 @@ def main():
         done[fid] = {"ok": True, "years": want[fid], "from": days[0], "to": days[-1], "n": len(hist),
                      "at": datetime.now(TW).strftime("%Y-%m-%d %H:%M")}
         print(f"✓ {fid} {f['name']}（{want[fid]} 年）：{days[0]} ～ {days[-1]}，{len(hist)} 筆（新增 {added}）")
+        if f["kind"] == "境外":
+            try:
+                divs = offshore_dividends(f, start, end)
+            except Exception as e:
+                divs = None
+                print(f"  ！配息查詢失敗：{e}")
+            if divs is not None:
+                done[fid]["div"] = len(divs)
+                if divs:
+                    save_div(fid, divs)
+                print(f"  配息 {len(divs)} 筆" + (f"（{min(divs)} ～ {max(divs)}）" if divs else "（這段期間沒有配息，或為累積型）"))
     with open(DONE, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(done, fh, ensure_ascii=False, indent=1, sort_keys=True)
     print(f"共查詢觀測站 {calls} 次")
