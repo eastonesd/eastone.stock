@@ -18,31 +18,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/style.css">
-  <!-- 東石保險服務平台共用頁首與登入（同網域，登入一次兩邊通用） -->
-  <link rel="stylesheet" href="/eastone.com/shared/site-header.css?v=20261123-1">
-  <link rel="stylesheet" href="/eastone.com/shared/auth.css?v=20261116-1">
-  <style>
-    .ghdr-wrap { position: relative; z-index: 5; }
-    body.auth-wait > *:not(.ghdr-wrap) { visibility: hidden; }
-  </style>
 </head>
-<body class="auth-wait">
-  <div class="ghdr-wrap">
-    <div class="ghdr-brand">
-      <img class="ghdr-mark" src="/eastone.com/icons/logo.png" alt="東石保險服務平台">
-      <div>
-        <div class="ghdr-title">東石保險服務平台</div>
-        <div class="ghdr-sub">EASTONE INSURANCE</div>
-      </div>
-    </div>
-    <nav class="ghdr-nav">
-      <button onclick="location.href='/eastone.com/index.html#claim'">文件下載</button>
-      <button onclick="location.href='/eastone.com/market/index.html'">財經日報</button>
-      <button onclick="location.href='/eastone.com/clients/index.html'">人壽管理</button>
-      <button onclick="location.href='/eastone.com/policies/index.html'">產險管理</button>
-      <button class="active" onclick="location.href='/eastone.stock/'">東石診股</button>
-    </nav>
-  </div>
+<body>
   <header class="topbar">
     <a class="brand" href="./">
       <img src="assets/icon.png" alt="">
@@ -202,11 +179,6 @@
     </section>
   </main>
 
-  <!-- 共用登入：沒登入會帶去東石保險的登入頁，登入後自動回到診股 -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
-  <script src="/eastone.com/shared/supabase-client.js?v=20261120-2"></script>
-  <script src="/eastone.com/shared/auth.js?v=20261126-1"></script>
-  <script>requireLogin('/eastone.com/', { allowPortal: true }).then(() => document.body.classList.remove('auth-wait'));</script>
   <script src="assets/scoring.js"></script>
   <script src="assets/finmind.js"></script>
   <script src="assets/funds.js"></script>
